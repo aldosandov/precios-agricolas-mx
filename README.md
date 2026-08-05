@@ -31,11 +31,19 @@ data/                Catálogos y mapeos canónicos versionados
 tests/               Pruebas de parser y aritmética
 └── fixtures/          HTML real capturado del SNIIM
 
+docs/                Notas de investigación de la fuente
 .github/workflows/   CI (pendiente de definir)
 ```
 
 Cada carpeta está vacía por ahora (solo `.gitkeep`) — issue ALD-5 crea el
 árbol; los siguientes issues de Fase 1 llenan cada parte.
+
+## Cómo se consulta el SNIIM
+
+El scraper no envía el formulario ASP.NET: va directo por `GET` a la página
+de resultados, con todos los criterios en la cadena de consulta y sin
+cookies. Endpoint, parámetros, restricciones del servidor y evidencia en
+[`docs/consulta-sniim.md`](docs/consulta-sniim.md).
 
 ## Setup
 
