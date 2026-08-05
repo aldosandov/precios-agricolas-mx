@@ -143,9 +143,57 @@ def build_origins(html: str) -> list[dict[str, str]]:
     return rows
 
 
+# Destination labels abbreviate one state differently than the origin
+# dropdown does. Spelled out so both catalogs name the same entity the same
+# way and can be joined on `state`.
+DESTINATION_STATE_ALIASES = {
+    "DF": "Distrito Federal",
+}
+
+
+def split_destination_label(label: str) -> tuple[str, str]:
+    """Split "Puebla: Central de Abasto de Puebla" into state and market.
+
+    Only the state is reliably separable. The city is sometimes the market
+    name ("Chiapas: Tapachula"), sometimes a suffix after a comma, and
+    sometimes absent — pulling it out would be guesswork, so the market name
+    is kept whole.
+    """
+    state, separator, market = label.partition(":")
+    if not separator:
+        raise ValueError(f"destination label without state prefix: {label!r}")
+    state = state.strip()
+    return DESTINATION_STATE_ALIASES.get(state, state), market.strip()
+
+
+def build_destinations(html: str) -> list[dict[str, str]]:
+    """Destination = the wholesale market where the price was surveyed."""
+    rows = []
+    for option in parse_select(html, "ddlDestino"):
+        state, market = split_destination_label(option.label)
+        if not market:
+            raise ValueError(f"destination {option.id} has no market name: {option.label!r}")
+        rows.append(
+            {
+                "destination_id": option.id,
+                "label": option.label,
+                "state": state,
+                "market": market,
+            }
+        )
+
+    # The two dropdowns must agree on how the country is divided up.
+    states = {row["label"] for row in build_origins(html) if row["kind"] == "state"}
+    unknown = {row["state"] for row in rows} - states
+    if unknown:
+        raise ValueError(f"ddlDestino: states absent from ddlOrigen: {sorted(unknown)}")
+    return rows
+
+
 CATALOGS = {
     "products": ("products.csv", build_products),
     "origins": ("origins.csv", build_origins),
+    "destinations": ("destinations.csv", build_destinations),
 }
 
 

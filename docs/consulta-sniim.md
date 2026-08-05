@@ -71,7 +71,7 @@ contenedor con un `<iframe>`. El formulario real es la URL de arriba.
 |----------|-----------|---------|----------|
 | Productos | `ddlProducto` | `data/catalogs/products.csv` | 222 (ALD-10) |
 | Orígenes | `ddlOrigen` | `data/catalogs/origins.csv` | 35 (ALD-11) |
-| Destinos | `ddlDestino` | pendiente | ALD-12 |
+| Destinos | `ddlDestino` | `data/catalogs/destinations.csv` | 49 (ALD-12) |
 
 La opción `-1` (`Todos`) no entra a ningún catálogo: es un modificador de
 la consulta, no un miembro. Ojo, `0` **sí** es miembro (`Sin Especificar`
@@ -102,6 +102,33 @@ la extracción se detiene en vez de reclasificarla como estado.
 **El campo `Origen` es de comercialización, no de producción**
 (restricción 7). `Nacional` e `Importación` lo dejan claro: son categorías
 de procedencia comercial, no entidades donde se cultivó nada.
+
+### Destinos
+
+49 mercados mayoristas, etiquetados `Estado: Nombre del mercado`. El
+catálogo guarda `state` y `market` aparte, más la etiqueta cruda.
+
+Dos detalles del formato:
+
+- Un estado viene abreviado distinto que en orígenes: los destinos dicen
+  `DF`, los orígenes `Distrito Federal`. El catálogo normaliza a la forma
+  larga para que ambos se puedan unir por `state`. La extracción falla si
+  aparece un estado que el catálogo de orígenes no conoce.
+- Una etiqueta trae espacio antes de los dos puntos
+  (`Baja California : Central de Abasto INDIA, Tijuana`).
+
+**No hay columna `city`.** El criterio original pedía separar estado y
+ciudad "cuando el selector lo permita", y no lo permite: la ciudad a veces
+es el nombre del mercado entero (`Chiapas: Tapachula`), a veces un sufijo
+tras coma (`Central de Abasto de La Laguna, Torreón`), a veces está dentro
+del nombre (`Central de Abasto de Puebla`) y a veces no aparece
+(`Veracruz: Mercado Malibrán`). Sacarla sería adivinar; si más adelante se
+necesita, va como mapeo curado a mano y versionado, no como parseo.
+
+Las etiquetas del catálogo coinciden **carácter por carácter** con la
+columna `Destino` de la tabla de resultados: se cotejaron 16 216 filas de
+tres respuestas distintas, sin una sola discrepancia. La unión por etiqueta
+es segura.
 
 ## Restricciones del servidor observadas
 
@@ -184,7 +211,8 @@ todos los productos ya rebasa 15 000 filas), solo cambiaría dónde duele.
 
 ## Formato de la respuesta
 
-Tabla HTML con encabezado en la primera fila:
+Tabla HTML con encabezado en la primera fila. Para la consulta de ejemplo
+(un producto fijo, todos los orígenes y destinos, rango de fechas):
 
 ```
 Fecha | Presentación | Origen | Destino | Precio Mín | Precio Max | Precio Frec | Obs.
@@ -196,12 +224,41 @@ Fila de ejemplo:
 02/01/2026 | Kilogramo | México | Aguascalientes: Centro Comercial Agropecuario de Aguascalientes | 8.00 | 11.00 | 10.00 |
 ```
 
-El parser mapea por nombre de encabezado, nunca por posición
-(restricción 2), y se detiene ante un encabezado desconocido
-(restricción 3).
-
 **`Origen` es el estado desde el que se comercializa el producto, no
 necesariamente donde se produjo** (restricción 7).
+
+### El esquema cambia según lo que se fije en la consulta
+
+Descubierto al cotejar respuestas de ALD-12. **Todo criterio fijado a un
+solo valor desaparece de la tabla** y se muestra arriba, en el bloque de
+resumen. No es un detalle cosmético: cambia el número y el orden de las
+columnas.
+
+| Consulta | Encabezado |
+|----------|-----------|
+| Rango de fechas, producto fijo, origen y destino en `-1` | `Fecha, Presentación, Origen, Destino, …precios…, Obs.` |
+| **Un solo día**, producto fijo, resto en `-1` | `Presentación, Origen, Destino, …` — **sin `Fecha`** |
+| Rango, `ProductoId=-1`, origen fijo | `Fecha, Producto, Calidad, Presentación, Destino, …` — **sin `Origen`**, y aparecen `Producto` y `Calidad` |
+| Rango, `ProductoId=-1`, destino fijo | `Fecha, Producto, Calidad, Presentación, Origen, …` — **sin `Destino`** |
+| Rango, producto fijo, destino fijo | `Fecha, Presentación, Origen, …` — **sin `Destino`** |
+| Rango, producto fijo, origen fijo | `Fecha, Presentación, Destino, …` — **sin `Origen`** |
+
+Ojo con el caso de un solo día: `fechaInicio == fechaFinal` quita la
+columna `Fecha`. Un parser que asuma posiciones fijas escribiría
+presentaciones en la columna de fecha sin fallar.
+
+Siempre presentes: `Presentación`, `Precio Mín`, `Precio Max`,
+`Precio Frec`, `Obs.`
+
+Por eso el parser mapea por nombre de encabezado, nunca por posición
+(restricción 2), y se detiene ante un encabezado desconocido
+(restricción 3). El vocabulario de encabezados conocidos tiene que cubrir
+las siete columnas posibles, no solo las de una forma de consulta.
+
+El scraper barre con producto fijo y origen/destino en `-1` sobre rangos de
+fechas, así que en la práctica siempre ve la primera forma. Las demás
+importan para las fixtures (ALD-13) y para que un cambio de estrategia no
+rompa la ingesta en silencio.
 
 ## Evidencia
 

@@ -1,4 +1,4 @@
-"""Integrity of the versioned canonical catalogs (ALD-10, ALD-11).
+"""Integrity of the versioned canonical catalogs (ALD-10, ALD-11, ALD-12).
 
 Everything downstream keys off these ids, so a duplicate, a stale entry or a
 mangled label is a data bug that would only surface much later as missing
@@ -12,9 +12,11 @@ import pytest
 
 from scraper.catalogs import (
     CATALOGS_DIR,
+    build_destinations,
     build_origins,
     build_products,
     fetch_form_html,
+    split_destination_label,
     split_product_label,
 )
 
@@ -23,6 +25,7 @@ from scraper.catalogs import (
 CATALOG_SPECS = {
     "products": ("products.csv", "product_id", build_products, 222),
     "origins": ("origins.csv", "origin_id", build_origins, 35),
+    "destinations": ("destinations.csv", "destination_id", build_destinations, 49),
 }
 
 
@@ -43,6 +46,11 @@ def products() -> list[dict[str, str]]:
 @pytest.fixture(scope="module")
 def origins() -> list[dict[str, str]]:
     return _rows("origins")
+
+
+@pytest.fixture(scope="module")
+def destinations() -> list[dict[str, str]]:
+    return _rows("destinations")
 
 
 @pytest.fixture(scope="module")
@@ -137,3 +145,41 @@ def test_non_geographic_origins_are_flagged(origins):
     assert by_label["Importación"] == "import"
     assert by_label["Nacional"] == "national"
     assert by_label["Sin Especificar"] == "unspecified"
+
+
+# --- destinations ---
+
+
+def test_destination_states_exist_in_the_origins_catalog(destinations, origins):
+    """Both dropdowns must divide the country the same way, so `state` joins."""
+    states = {row["label"] for row in origins if row["kind"] == "state"}
+    assert {row["state"] for row in destinations} <= states
+
+
+def test_every_destination_has_a_market_name(destinations):
+    assert all(row["market"] for row in destinations)
+
+
+def test_destination_split_normalises_the_df_alias():
+    """The destination dropdown says "DF" where the origin one says the long name."""
+    state, market = split_destination_label("DF: Central de Abasto de Iztapalapa DF")
+    assert state == "Distrito Federal"
+    assert market == "Central de Abasto de Iztapalapa DF"
+
+
+def test_destination_split_tolerates_stray_whitespace():
+    """One label really is "Baja California : ..." with a space before the colon."""
+    assert split_destination_label("Baja California : Central de Abasto INDIA, Tijuana") == (
+        "Baja California",
+        "Central de Abasto INDIA, Tijuana",
+    )
+
+
+def test_market_name_may_be_just_a_city(destinations):
+    """City is not separable from the market name; the label is kept whole.
+
+    "Chiapas: Tapachula" has no market name at all, which is why there is no
+    `city` column to fill.
+    """
+    by_id = {row["destination_id"]: row for row in destinations}
+    assert by_id["71"]["market"] == "Tapachula"
