@@ -56,8 +56,28 @@ El formulario también manda `Origen=<texto>` y `Destino=<texto>`. Son
 redundantes: la respuesta es idéntica si se omiten. El scraper no los envía.
 
 Los ids de producto, origen y destino salen de los `<select>` del
-formulario (`ddlProducto`, `ddlOrigen`, `ddlDestino`); extraerlos y
-versionarlos es trabajo de ALD-10, ALD-11 y ALD-12.
+formulario (`ddlProducto`, `ddlOrigen`, `ddlDestino`), que se sirve en:
+
+```
+https://www.economia-sniim.gob.mx/nuevo/Consultas/MercadosNacionales/PreciosDeMercado/Agricolas/ConsultaFrutasYHortalizas.aspx?SubOpcion=4|0
+```
+
+Ojo: la URL que se ve en el navegador es `Home.aspx?opcion=...`, un
+contenedor con un `<iframe>`. El formulario real es la URL de arriba.
+
+`scraper/catalogs.py` los extrae a `data/catalogs/`. Ya versionado:
+
+| Catálogo | `<select>` | Archivo | Entradas |
+|----------|-----------|---------|----------|
+| Productos | `ddlProducto` | `data/catalogs/products.csv` | 222 (ALD-10) |
+| Orígenes | `ddlOrigen` | pendiente | ALD-11 |
+| Destinos | `ddlDestino` | pendiente | ALD-12 |
+
+La opción `-1` (`Todos`) no entra al catálogo: es un modificador de la
+consulta, no un miembro. Las etiquetas de producto vienen como
+`Nombre - Calidad`; se parten por el **último** separador, porque
+`Nuez - Western - Primera` es la variedad Western, calidad Primera. Se
+guarda también la etiqueta cruda, así que la partición es reversible.
 
 ## Restricciones del servidor observadas
 

@@ -26,7 +26,7 @@ app/                 Streamlit. Solo presentación e interacción.
 └── texts/            Copys y textos estáticos
 
 data/                Catálogos y mapeos canónicos versionados
-└── catalogs/          Mapeo producto/mercado (nunca inferido en runtime)
+└── catalogs/          products.csv y demás mapeos (nunca inferidos en runtime)
 
 tests/               Pruebas de parser y aritmética
 └── fixtures/          HTML real capturado del SNIIM
@@ -46,6 +46,18 @@ cookies. Pide `RegistrosPorPagina=5000` y controla el volumen por ventana
 de fechas, subdividiendo cuando el paginador reporta más de una página —
 nunca paginando. Endpoint, parámetros, restricciones del servidor y
 evidencia en [`docs/consulta-sniim.md`](docs/consulta-sniim.md).
+
+Los ids internos que espera ese endpoint salen de los `<select>` del
+formulario y viven versionados en `data/catalogs/`. Se regeneran con:
+
+```bash
+uv run python -m scraper.catalogs            # todos los catálogos
+uv run python -m scraper.catalogs products   # solo uno
+```
+
+Nunca se infieren en tiempo de consulta. `tests/test_catalogs.py` compara
+el archivo versionado contra el formulario en vivo, así que un producto
+nuevo o renombrado en el SNIIM rompe la prueba y obliga a revisar el diff.
 
 ## Setup
 
