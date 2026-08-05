@@ -1,0 +1,21 @@
+[project]
+name = "precios-agricolas-mx"
+version = "0.1.0"
+description = "Observatorio de precios agrícolas del SNIIM para CIMA A.C."
+requires-python = ">=3.11"
+dependencies = [
+    "scrapy>=2.17",
+    "parsel>=1.11",
+    "pandas>=3.0",
+    "google-cloud-bigquery>=3.42",
+    "streamlit>=1.61",
+    "plotly>=6.9",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1",
+]
+
+[tool.uv]
+package = false

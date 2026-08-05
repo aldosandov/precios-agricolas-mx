@@ -216,3 +216,40 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Logs
+logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+dev-debug.log
+# Dependency directories
+node_modules/
+# Environment variables
+# Editor directories and files
+.idea
+.vscode
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+# OS specific
+.DS_Store
+
+# Task files
+# tasks.json
+# tasks/
+
+# GCP / Kaggle credentials
+*.credentials.json
+kaggle.json
+service-account*.json
+gcp-key*.json
+
+# Scrapy temp & runtime
+tmp/
+*.parquet
+
+# Zone identifiers (Windows WSL artifacts)
+*.Zone.Identifier
