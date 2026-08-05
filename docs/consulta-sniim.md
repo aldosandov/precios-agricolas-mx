@@ -189,7 +189,16 @@ no solo mirar si es mayor que 1.
 Detalle útil: el denominador del paginador es `ceil(total / RegistrosPorPagina)`,
 y con `RegistrosPorPagina=-1` sale exactamente `-total`. Sirve para conocer
 el tamaño real del conjunto con una respuesta de 14 KB, pero es un truco de
-sondeo, no algo de lo que dependa la ingesta.
+sondeo, no algo de lo que dependa la ingesta. `scraper/coverage.py` lo usa
+para medir la profundidad histórica de cada mercado sin descargar un solo
+resultado (ver [`profundidad-historica.md`](profundidad-historica.md)).
+
+Otro mensaje del servidor, distinto del rechazo por criterios: una consulta
+válida cuyo rango no tiene ni un registro responde 200 con el texto
+`NO HAY REGISTROS (cambie su consulta e intente nuevamente)` y **sin
+paginador**. Es lo que sale, por ejemplo, al pedir un mercado en un año
+anterior a su histórico. No confundirlo con el rechazo: uno significa "no
+hubo precios", el otro "esta consulta no es válida".
 
 ### Qué manda el scraper
 

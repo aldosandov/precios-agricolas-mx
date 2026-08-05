@@ -13,12 +13,13 @@ bloqueo.
 
 El PRD marca la Fase 0 como "hecha" pero ningún artefacto había
 materializado — Fase 1 reconstruye eso desde cero antes de tocar BigQuery.
-Cerrados: ALD-5, 7, 8, 9, 10, 11, 12, 13, 15. Sigue ALD-16 (parser por
-encabezado), luego ALD-14, 19, 30.
+Cerrados: ALD-5, 7, 8, 9, 10, 11, 12, 13, 14, 15. Sigue ALD-16 (parser por
+encabezado), luego ALD-19, 30.
 
 En pie: `scraper/catalogs.py` (regenera `data/catalogs/`),
 `scraper/fixtures.py` (recaptura `tests/fixtures/sniim/`),
-`scraper/query.py` (URL + subdivisión de ventana, puro). Todavía vacíos
+`scraper/query.py` (URL + subdivisión de ventana, puro),
+`scraper/coverage.py` (profundidad histórica por mercado). Todavía vacíos
 `transform/`, `app/`, `scraper/spiders|parsers|pipelines/`.
 
 ## Fuente SNIIM — trampas verificadas
@@ -45,7 +46,27 @@ re-derivar:
   inferible de la respuesta, hay que registrar qué se mandó.
 - `RegistrosPorPagina` acepta hasta `Int32.MaxValue`; el límite real es el
   peso de la respuesta. Negativo devuelve 1 fila con `Página 1 de -N`, sin
-  error.
+  error. Ese `-N` es el total exacto del conjunto: prohibido en la ingesta,
+  es el sondeo barato que usa `scraper/coverage.py`.
+- Rango válido sin registros ≠ consulta rechazada: el primero responde 200
+  con `NO HAY REGISTROS` y sin paginador.
+- El SNIIM devuelve **503** bajo carga. Con 4 peticiones en paralelo hay que
+  esperar entre reintentos (5/15/45/120 s) y poder retomar desde checkpoint.
+
+## Profundidad histórica (ALD-14)
+
+Medida mercado por mercado, no supuesta. Detalle en
+`docs/profundidad-historica.md`; tablas en `data/catalogs/market_coverage.csv`
+y `market_coverage_by_year.csv`.
+
+- **El histórico arranca en 1998, no en 2007.** El backfill de la Fase 2
+  (ALD-27) va desde 1998. ~15.3 millones de filas en total.
+- 32 de 49 mercados llegan a 1998, 15 empiezan después. **Dos nunca tienen
+  datos** (`71` Tapachula, `122` Chilpancingo) y **cinco dejaron de
+  reportar** (Irapuato y Celaya en 2017, Cancún 2019, Durango 2022, Cuautla
+  2025). Estar en el catálogo no implica tener datos.
+- Dos mercados tienen huecos internos (Villahermosa 1999–2001, Zacatecas
+  2003): una ventana vacía no siempre es un fallo de ingesta.
 
 ## Restricciones no negociables
 

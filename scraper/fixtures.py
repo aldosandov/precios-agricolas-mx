@@ -73,6 +73,35 @@ FIXTURES: dict[str, dict[str, object]] = {
         ),
         "query": {**BASE, **SINGLE_DAY, "ProductoId": PAPA_ALPHA},
     },
+    "probe_row_count": {
+        "purpose": (
+            "Sondeo de profundidad histórica (ALD-14): RegistrosPorPagina=-1 "
+            "devuelve una sola fila y 'Página 1 de -N', con N = total real del "
+            "conjunto. Truco de sondeo, prohibido en la ingesta."
+        ),
+        "query": {
+            **BASE,
+            "fechaInicio": "01/01/2024",
+            "fechaFinal": "31/12/2024",
+            "ProductoId": "-1",
+            "DestinoId": CEDA_PUEBLA,
+            "RegistrosPorPagina": "-1",
+        },
+    },
+    "probe_no_records": {
+        "purpose": (
+            "Año sin datos para un mercado: 200 con 'NO HAY REGISTROS' y sin "
+            "paginador. Es lo que marca el piso del backfill por mercado."
+        ),
+        "query": {
+            **BASE,
+            "fechaInicio": "01/01/1996",
+            "fechaFinal": "31/12/1996",
+            "ProductoId": "-1",
+            "DestinoId": CEDA_PUEBLA,
+            "RegistrosPorPagina": "-1",
+        },
+    },
     "rejected_all_criteria": {
         "purpose": (
             "Producto, origen y destino en -1 a la vez: 200 sin filas y con "

@@ -251,5 +251,8 @@ gcp-key*.json
 tmp/
 *.parquet
 
+# Checkpoint of an in-flight coverage scan (scraper/coverage.py)
+data/catalogs/market_coverage.partial.csv
+
 # Zone identifiers (Windows WSL artifacts)
 *.Zone.Identifier

@@ -27,6 +27,7 @@ app/                 Streamlit. Solo presentación e interacción.
 
 data/                Catálogos y mapeos canónicos versionados
 └── catalogs/          products/origins/destinations.csv (nunca inferidos en runtime)
+                       + market_coverage*.csv (profundidad histórica por mercado)
 
 tests/               Pruebas de parser y aritmética
 └── fixtures/sniim/   HTML real capturado del SNIIM + manifest.json
@@ -62,6 +63,23 @@ uv run python -m scraper.catalogs products   # solo uno
 Nunca se infieren en tiempo de consulta. `tests/test_catalogs.py` compara
 el archivo versionado contra el formulario en vivo, así que un producto
 nuevo o renombrado en el SNIIM rompe la prueba y obliga a revisar el diff.
+
+## Profundidad histórica
+
+El histórico del SNIIM arranca en **1998** (el PRD suponía 2007) y no es
+parejo: 32 de los 49 mercados llegan hasta 1998, 15 empiezan después, dos no
+tienen datos en ningún año y cinco dejaron de reportar. Medido mercado por
+mercado y año por año, sin descargar resultados:
+
+```bash
+uv run python -m scraper.coverage        # regenera la tabla (~1 h)
+uv run python -m scraper.coverage 210    # sondea un mercado, sin escribir
+```
+
+Resultado versionado en `data/catalogs/market_coverage.csv` (primer y último
+año, huecos y volumen por mercado) con la evidencia por año en
+`market_coverage_by_year.csv`. Hallazgos y método en
+[`docs/profundidad-historica.md`](docs/profundidad-historica.md).
 
 ## Fixtures
 

@@ -23,6 +23,18 @@
     "purpose": "fechaInicio == fechaFinal elimina la columna Fecha. Un parser por posición no falla aquí, solo escribe datos corridos.",
     "bytes": 36246
   },
+  "probe_row_count": {
+    "file": "probe_row_count.html",
+    "url": "https://www.economia-sniim.gob.mx/nuevo/Consultas/MercadosNacionales/PreciosDeMercado/Agricolas/ResultadosConsultaFechaFrutasYHortalizas.aspx?fechaInicio=01%2F01%2F2024&fechaFinal=31%2F12%2F2024&ProductoId=-1&OrigenId=-1&DestinoId=210&PreciosPorId=2&RegistrosPorPagina=-1",
+    "purpose": "Sondeo de profundidad histórica (ALD-14): RegistrosPorPagina=-1 devuelve una sola fila y 'Página 1 de -N', con N = total real del conjunto. Truco de sondeo, prohibido en la ingesta.",
+    "bytes": 13769
+  },
+  "probe_no_records": {
+    "file": "probe_no_records.html",
+    "url": "https://www.economia-sniim.gob.mx/nuevo/Consultas/MercadosNacionales/PreciosDeMercado/Agricolas/ResultadosConsultaFechaFrutasYHortalizas.aspx?fechaInicio=01%2F01%2F1996&fechaFinal=31%2F12%2F1996&ProductoId=-1&OrigenId=-1&DestinoId=210&PreciosPorId=2&RegistrosPorPagina=-1",
+    "purpose": "Año sin datos para un mercado: 200 con 'NO HAY REGISTROS' y sin paginador. Es lo que marca el piso del backfill por mercado.",
+    "bytes": 9338
+  },
   "rejected_all_criteria": {
     "file": "rejected_all_criteria.html",
     "url": "https://www.economia-sniim.gob.mx/nuevo/Consultas/MercadosNacionales/PreciosDeMercado/Agricolas/ResultadosConsultaFechaFrutasYHortalizas.aspx?fechaInicio=01%2F07%2F2026&fechaFinal=03%2F07%2F2026&ProductoId=-1&OrigenId=-1&DestinoId=-1&PreciosPorId=2&RegistrosPorPagina=5000",
