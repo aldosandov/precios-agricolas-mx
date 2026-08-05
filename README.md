@@ -47,6 +47,10 @@ de fechas, subdividiendo cuando el paginador reporta más de una página —
 nunca paginando. Endpoint, parámetros, restricciones del servidor y
 evidencia en [`docs/consulta-sniim.md`](docs/consulta-sniim.md).
 
+`scraper/query.py` arma esas URLs y decide la subdivisión. Es puro: no hace
+peticiones, solo construye la consulta y lee el indicador de página de la
+respuesta que le pasen.
+
 Los ids internos que espera ese endpoint salen de los `<select>` del
 formulario y viven versionados en `data/catalogs/`. Se regeneran con:
 

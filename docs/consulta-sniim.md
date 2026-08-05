@@ -209,6 +209,18 @@ fechas: arranca en bloques trimestrales y subdivide cuando el paginador
 reporta `N > 1`. Subir el valor no evitaría la subdivisión (un trimestre de
 todos los productos ya rebasa 15 000 filas), solo cambiaría dónde duele.
 
+Implementado en `scraper/query.py` (ALD-15). Las mitades son adyacentes por
+construcción — la segunda arranca el día siguiente al fin de la primera —
+así que no hay traslape ni hueco por más veces que se subdivida. Si un solo
+día sigue desbordando no queda nada que partir y se levanta
+`WindowExhausted`: es señal de que algo cambió, no algo que se resuelva
+solo. La salida sería subir `RegistrosPorPagina` para ese caso.
+
+El detector **desescapa entidades HTML antes de buscar el indicador**. El
+SNIIM ya sirvió esa etiqueta como `P&aacute;gina`; buscarla en el marcado
+crudo no la encontraría y una respuesta truncada pasaría por completa. Es
+el único punto donde equivocarse pierde filas en silencio en vez de fallar.
+
 ## Formato de la respuesta
 
 Tabla HTML con encabezado en la primera fila. Para la consulta de ejemplo
