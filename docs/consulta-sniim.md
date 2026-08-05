@@ -70,14 +70,38 @@ contenedor con un `<iframe>`. El formulario real es la URL de arriba.
 | Catálogo | `<select>` | Archivo | Entradas |
 |----------|-----------|---------|----------|
 | Productos | `ddlProducto` | `data/catalogs/products.csv` | 222 (ALD-10) |
-| Orígenes | `ddlOrigen` | pendiente | ALD-11 |
+| Orígenes | `ddlOrigen` | `data/catalogs/origins.csv` | 35 (ALD-11) |
 | Destinos | `ddlDestino` | pendiente | ALD-12 |
 
-La opción `-1` (`Todos`) no entra al catálogo: es un modificador de la
-consulta, no un miembro. Las etiquetas de producto vienen como
-`Nombre - Calidad`; se parten por el **último** separador, porque
-`Nuez - Western - Primera` es la variedad Western, calidad Primera. Se
-guarda también la etiqueta cruda, así que la partición es reversible.
+La opción `-1` (`Todos`) no entra a ningún catálogo: es un modificador de
+la consulta, no un miembro. Ojo, `0` **sí** es miembro (`Sin Especificar`
+en orígenes), así que el filtro es por `-1`, no por "no positivo".
+
+Las etiquetas de producto vienen como `Nombre - Calidad`; se parten por el
+**último** separador, porque `Nuez - Western - Primera` es la variedad
+Western, calidad Primera. Se guarda también la etiqueta cruda, así que la
+partición es reversible.
+
+### Orígenes
+
+35 entradas: las 32 entidades federativas (31 estados más la Ciudad de
+México, que el SNIIM sigue llamando `Distrito Federal`) y tres que **no
+son lugares**:
+
+| id | Etiqueta | `kind` |
+|----|----------|--------|
+| 0 | Sin Especificar | `unspecified` |
+| 44 | Nacional | `national` |
+| 55 | Importación | `import` |
+
+El catálogo las marca en la columna `kind` para que nada aguas abajo las
+trate como geografía (un mapa por estado, por ejemplo, tiene que saltarlas).
+La clasificación se hace por etiqueta, no por id: si el SNIIM renombra una,
+la extracción se detiene en vez de reclasificarla como estado.
+
+**El campo `Origen` es de comercialización, no de producción**
+(restricción 7). `Nacional` e `Importación` lo dejan claro: son categorías
+de procedencia comercial, no entidades donde se cultivó nada.
 
 ## Restricciones del servidor observadas
 

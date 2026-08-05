@@ -107,8 +107,45 @@ def build_products(html: str) -> list[dict[str, str]]:
     return rows
 
 
+# Origins are federal entities except for these three. They are not places,
+# so nothing downstream may treat them as geography. Keyed by label rather
+# than by id: a renamed entry must fail loudly instead of being classified
+# as a state, and the ids are SNIIM's to change.
+NON_STATE_ORIGINS = {
+    "Sin Especificar": "unspecified",
+    "Nacional": "national",
+    "Importación": "import",
+}
+
+# The 31 states plus Mexico City, which SNIIM still lists as "Distrito Federal".
+EXPECTED_STATE_COUNT = 32
+
+
+def build_origins(html: str) -> list[dict[str, str]]:
+    """Origin = where the produce is *marketed from*, never where it was grown."""
+    rows = [
+        {
+            "origin_id": option.id,
+            "label": option.label,
+            "kind": NON_STATE_ORIGINS.get(option.label, "state"),
+        }
+        for option in parse_select(html, "ddlOrigen")
+    ]
+
+    found = {row["kind"] for row in rows}
+    missing = set(NON_STATE_ORIGINS.values()) - found
+    if missing:
+        raise ValueError(f"ddlOrigen: non-state origins renamed or gone: {missing}")
+
+    states = sum(1 for row in rows if row["kind"] == "state")
+    if states != EXPECTED_STATE_COUNT:
+        raise ValueError(f"ddlOrigen: expected {EXPECTED_STATE_COUNT} states, got {states}")
+    return rows
+
+
 CATALOGS = {
     "products": ("products.csv", build_products),
+    "origins": ("origins.csv", build_origins),
 }
 
 

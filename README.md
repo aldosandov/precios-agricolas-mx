@@ -26,7 +26,7 @@ app/                 Streamlit. Solo presentación e interacción.
 └── texts/            Copys y textos estáticos
 
 data/                Catálogos y mapeos canónicos versionados
-└── catalogs/          products.csv y demás mapeos (nunca inferidos en runtime)
+└── catalogs/          products.csv, origins.csv (nunca inferidos en runtime)
 
 tests/               Pruebas de parser y aritmética
 └── fixtures/          HTML real capturado del SNIIM

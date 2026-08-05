@@ -1,0 +1,36 @@
+origin_id,label,kind
+0,Sin Especificar,unspecified
+1,Aguascalientes,state
+2,Baja California,state
+3,Baja California Sur,state
+4,Campeche,state
+5,Chiapas,state
+6,Chihuahua,state
+7,Coahuila,state
+8,Colima,state
+9,Distrito Federal,state
+10,Durango,state
+11,Guanajuato,state
+12,Guerrero,state
+13,Hidalgo,state
+14,Jalisco,state
+15,México,state
+16,Michoacán,state
+17,Morelos,state
+18,Nayarit,state
+19,Nuevo León,state
+20,Oaxaca,state
+21,Puebla,state
+22,Querétaro,state
+23,Quintana Roo,state
+24,San Luis Potosí,state
+25,Sinaloa,state
+26,Sonora,state
+27,Tabasco,state
+28,Tamaulipas,state
+29,Tlaxcala,state
+30,Veracruz,state
+31,Yucatán,state
+32,Zacatecas,state
+44,Nacional,national
+55,Importación,import
