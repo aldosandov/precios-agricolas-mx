@@ -11,10 +11,11 @@ bloqueo.
 
 ## Estado actual
 
-El repo está vacío pese a que el PRD marca la Fase 0 como "hecha" — ningún
-artefacto (scraper, catálogos, fixtures, tests) llegó a materializarse.
-Fase 1 (Linear) reconstruye eso desde cero antes de tocar BigQuery. Ver
-issues ALD-5 en adelante para el desglose fase por fase.
+El PRD marca la Fase 0 como "hecha" pero ningún artefacto había
+materializado — Fase 1 (Linear) reconstruye eso desde cero antes de tocar
+BigQuery. ALD-5 (estructura de repo + dependencias) ya cerrado: árbol de
+carpetas y `pyproject.toml` en pie, carpetas aún vacías (`.gitkeep`). Ver
+issues ALD-6 en adelante para el resto del desglose de Fase 1.
 
 ## Restricciones no negociables
 
