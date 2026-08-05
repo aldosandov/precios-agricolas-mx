@@ -1,0 +1,32 @@
+{
+  "range_product_fixed": {
+    "file": "range_product_fixed.html",
+    "url": "https://www.economia-sniim.gob.mx/nuevo/Consultas/MercadosNacionales/PreciosDeMercado/Agricolas/ResultadosConsultaFechaFrutasYHortalizas.aspx?fechaInicio=01%2F07%2F2026&fechaFinal=03%2F07%2F2026&ProductoId=740&OrigenId=-1&DestinoId=-1&PreciosPorId=2&RegistrosPorPagina=5000",
+    "purpose": "Forma que produce el barrido en producción: rango de fechas, un producto fijo, todos los orígenes y destinos. Trae la columna Fecha.",
+    "bytes": 94357
+  },
+  "range_destination_fixed": {
+    "file": "range_destination_fixed.html",
+    "url": "https://www.economia-sniim.gob.mx/nuevo/Consultas/MercadosNacionales/PreciosDeMercado/Agricolas/ResultadosConsultaFechaFrutasYHortalizas.aspx?fechaInicio=01%2F07%2F2026&fechaFinal=03%2F07%2F2026&ProductoId=-1&OrigenId=-1&DestinoId=210&PreciosPorId=2&RegistrosPorPagina=5000",
+    "purpose": "Todos los productos contra un solo mercado. Añade Producto y Calidad, quita Destino, y mete filas separadoras de categoría (Frutas / Frutas de Temporada / Hortalizas / Chiles Secos).",
+    "bytes": 152210
+  },
+  "paginated_overflow": {
+    "file": "paginated_overflow.html",
+    "url": "https://www.economia-sniim.gob.mx/nuevo/Consultas/MercadosNacionales/PreciosDeMercado/Agricolas/ResultadosConsultaFechaFrutasYHortalizas.aspx?fechaInicio=01%2F07%2F2026&fechaFinal=03%2F07%2F2026&ProductoId=740&OrigenId=-1&DestinoId=-1&PreciosPorId=2&RegistrosPorPagina=50",
+    "purpose": "Truncamiento silencioso: mismo rango con RegistrosPorPagina chico, para que el paginador diga 'Página 1 de N' con N > 1.",
+    "bytes": 49563
+  },
+  "single_day_no_date_column": {
+    "file": "single_day_no_date_column.html",
+    "url": "https://www.economia-sniim.gob.mx/nuevo/Consultas/MercadosNacionales/PreciosDeMercado/Agricolas/ResultadosConsultaFechaFrutasYHortalizas.aspx?fechaInicio=01%2F07%2F2026&fechaFinal=01%2F07%2F2026&ProductoId=740&OrigenId=-1&DestinoId=-1&PreciosPorId=2&RegistrosPorPagina=5000",
+    "purpose": "fechaInicio == fechaFinal elimina la columna Fecha. Un parser por posición no falla aquí, solo escribe datos corridos.",
+    "bytes": 36246
+  },
+  "rejected_all_criteria": {
+    "file": "rejected_all_criteria.html",
+    "url": "https://www.economia-sniim.gob.mx/nuevo/Consultas/MercadosNacionales/PreciosDeMercado/Agricolas/ResultadosConsultaFechaFrutasYHortalizas.aspx?fechaInicio=01%2F07%2F2026&fechaFinal=03%2F07%2F2026&ProductoId=-1&OrigenId=-1&DestinoId=-1&PreciosPorId=2&RegistrosPorPagina=5000",
+    "purpose": "Producto, origen y destino en -1 a la vez: 200 sin filas y con mensaje de rechazo. El parser no debe leerlo como 'no hubo precios'.",
+    "bytes": 8711
+  }
+}

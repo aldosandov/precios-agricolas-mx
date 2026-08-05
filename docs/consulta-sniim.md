@@ -260,6 +260,36 @@ fechas, así que en la práctica siempre ve la primera forma. Las demás
 importan para las fixtures (ALD-13) y para que un cambio de estrategia no
 rompa la ingesta en silencio.
 
+### Filas que no son datos
+
+Entre las filas de datos aparecen **separadores de categoría**: filas de una
+sola celda con el nombre de la categoría. Son cuatro, no las tres que
+listaba el PRD:
+
+```
+Frutas | Frutas de Temporada | Hortalizas | Chiles Secos
+```
+
+Salen **en cualquier forma de consulta**, incluso cuando se pide un solo
+producto (ahí sale una sola, la de su categoría). El parser tiene que
+saltarlas siempre, no solo en el barrido de todos los productos.
+
+De paso: como el separador dice a qué categoría pertenece cada producto, una
+respuesta con `ProductoId=-1` permite derivar el mapeo producto → categoría.
+Sería un enriquecimiento útil de `products.csv`; hoy no está.
+
+### Codificación
+
+La página de resultados **no declara charset en el HTML**: no hay
+`<meta charset>` ni equivalente. El único lugar donde viene es el header
+`Content-Type: text/html; charset=utf-8`. Decodificar por el header, nunca
+por el documento.
+
+En el cuerpo solo aparecen dos entidades HTML, `&nbsp;` y `&amp;`; los
+acentos vienen como UTF-8 crudo (`Página`, `Michoacán`). Ojo: la página del
+**formulario** sí usa entidades (`Uni&#243;n`, `&quot;`), así que el
+extractor de catálogos y el parser de resultados no enfrentan lo mismo.
+
 ## Evidencia
 
 Todas las peticiones se hicieron con cookies deshabilitadas

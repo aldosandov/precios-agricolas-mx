@@ -6,6 +6,7 @@ silently falling back to the stateful POST form.
 """
 
 import re
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -45,11 +46,24 @@ def _get(query: dict[str, str]) -> tuple[int, str]:
 
     urllib sends no cookies unless a CookieProcessor is installed, so this
     opener is exactly the cookieless case we need to prove.
+
+    Retries once on a dropped connection or timeout. SNIIM occasionally
+    stalls under a burst of requests, and a flaky suite gets ignored — an
+    HTTPError is a real answer from the server and is never retried.
     """
     url = f"{RESULTS_URL}?{urllib.parse.urlencode(query)}"
     opener = urllib.request.build_opener()
-    with opener.open(url, timeout=60) as resp:
-        return resp.status, resp.read().decode("utf-8", errors="replace")
+    for attempt in (1, 2):
+        try:
+            with opener.open(url, timeout=60) as resp:
+                return resp.status, resp.read().decode("utf-8", errors="replace")
+        except urllib.error.HTTPError:
+            raise
+        except (urllib.error.URLError, TimeoutError, ConnectionError):
+            if attempt == 2:
+                raise
+            time.sleep(2)
+    raise AssertionError("unreachable")
 
 
 def _cells(html: str) -> list[list[str]]:

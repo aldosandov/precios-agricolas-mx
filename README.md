@@ -29,7 +29,7 @@ data/                Catálogos y mapeos canónicos versionados
 └── catalogs/          products/origins/destinations.csv (nunca inferidos en runtime)
 
 tests/               Pruebas de parser y aritmética
-└── fixtures/          HTML real capturado del SNIIM
+└── fixtures/sniim/   HTML real capturado del SNIIM + manifest.json
 
 docs/                Notas de investigación de la fuente
 .github/workflows/   CI (pendiente de definir)
@@ -58,6 +58,23 @@ uv run python -m scraper.catalogs products   # solo uno
 Nunca se infieren en tiempo de consulta. `tests/test_catalogs.py` compara
 el archivo versionado contra el formulario en vivo, así que un producto
 nuevo o renombrado en el SNIIM rompe la prueba y obliga a revisar el diff.
+
+## Fixtures
+
+El parser se prueba contra HTML real guardado, nunca inventado. Las
+respuestas están en `tests/fixtures/sniim/`, con `manifest.json` guardando
+la URL exacta que produjo cada una y qué caso ejercita. Cubren las formas
+en que cambia el esquema de la tabla, el truncamiento por paginador, los
+separadores de categoría y la respuesta de rechazo.
+
+```bash
+uv run python -m scraper.fixtures                     # recapturar todas
+uv run python -m scraper.fixtures paginated_overflow  # solo una
+```
+
+Recapturar reescribe historia: el SNIIM revisa precios pasados, así que hay
+que revisar el diff antes de commitear. `tests/test_fixtures.py` corre sin
+red y detecta si una recaptura cambió la forma de la respuesta.
 
 ## Setup
 
