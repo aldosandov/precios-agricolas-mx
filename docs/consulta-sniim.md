@@ -50,7 +50,7 @@ curl -s -o /dev/null -w '%{http_code}\n' --cookie /dev/null --cookie-jar /dev/nu
 | `OrigenId`          | sí          | id de estado, o `-1` = todos                        | Estado de comercialización, no de producción |
 | `DestinoId`         | sí          | id de mercado, o `-1` = todos                       | |
 | `PreciosPorId`      | no          | `1` = presentación comercial, `2` = kilogramo       | Si se omite, el sitio asume `1` |
-| `RegistrosPorPagina`| sí          | entero                                              | Se probó `1000`; el límite superior real lo determina ALD-9 |
+| `RegistrosPorPagina`| sí          | entero positivo, máx. `2147483647`                  | Si se omite, el sitio asume `100`. Ver [límite superior](#límite-superior-de-registrosporpagina) |
 
 El formulario también manda `Origen=<texto>` y `Destino=<texto>`. Son
 redundantes: la respuesta es idéntica si se omiten. El scraper no los envía.
@@ -88,6 +88,55 @@ versionarlos es trabajo de ALD-10, ALD-11 y ALD-12.
 
    El parser debe leer ese `N`; si `N > 1`, la ventana de fechas se
    subdivide y se reintenta (restricción 1 del proyecto: nunca paginar).
+
+## Límite superior de `RegistrosPorPagina`
+
+Verificado en ALD-9, el 2026-08-05.
+
+**No hay tope propio del parámetro más allá del `Int32` de .NET.** El
+servidor acepta hasta `2147483647` y devuelve el conjunto completo en una
+sola página. Se comprobó con una consulta de 67 834 registros (todos los
+productos, origen Puebla, año 2025 completo): con
+`RegistrosPorPagina=100000` responde 200 con las 67 834 filas y
+`Página 1 de 1`. El PRD asumía 5000 como máximo verificado; el techo real
+es mucho mayor.
+
+| Valor | Respuesta | Comportamiento |
+|-------|-----------|----------------|
+| omitido o vacío | 200 | Asume `100` y pagina |
+| `0` | **500** | `Attempted to divide by zero.` |
+| `-1` (o cualquier negativo) | 200 | **Peligroso**: devuelve 1 sola fila y el paginador dice `Página 1 de -2241`. Sin error. |
+| `abc` (no numérico) | **500** | `Input string was not in a correct format.` |
+| `1000` … `2147483647` | 200 | Correcto; trunca solo si el total excede el valor |
+| `2147483648` (desborde `Int32`) | **500** | `Arithmetic operation resulted in an overflow.` |
+
+Los 500 son páginas de error de ASP.NET, no respuestas vacías, así que
+fallan ruidosamente por sí solos. El caso `-1` es el único que pierde datos
+en silencio: **el parser debe rechazar un denominador de paginador ≤ 0**,
+no solo mirar si es mayor que 1.
+
+Detalle útil: el denominador del paginador es `ceil(total / RegistrosPorPagina)`,
+y con `RegistrosPorPagina=-1` sale exactamente `-total`. Sirve para conocer
+el tamaño real del conjunto con una respuesta de 14 KB, pero es un truco de
+sondeo, no algo de lo que dependa la ingesta.
+
+### Qué manda el scraper
+
+El límite que importa no es el del parámetro sino el peso de la respuesta.
+Medido sobre la misma consulta (origen Puebla):
+
+| `RegistrosPorPagina` | Filas devueltas | Bytes | Tiempo |
+|----------------------|-----------------|-------|--------|
+| 5 000  | 5 000 (truncado) | 4.0 MB | 4.0 s |
+| 10 000 | 10 000 (truncado) | 8.0 MB | 4.7 s |
+| 20 000 | 15 290 (completo, Q1) | 12 MB | 5.3 s |
+| 100 000 | 67 834 (completo, año 2025) | **54 MB** | 24 s |
+
+Una respuesta de 54 MB para parsear en memoria no vale la pena. El scraper
+manda **`RegistrosPorPagina=5000`** y controla el volumen por ventana de
+fechas: arranca en bloques trimestrales y subdivide cuando el paginador
+reporta `N > 1`. Subir el valor no evitaría la subdivisión (un trimestre de
+todos los productos ya rebasa 15 000 filas), solo cambiaría dónde duele.
 
 ## Formato de la respuesta
 

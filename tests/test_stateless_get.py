@@ -1,13 +1,16 @@
 """Live guard: the SNIIM results page must stay reachable by a plain, cookieless GET.
 
-See docs/consulta-sniim.md (ALD-8). If any of these break, the scraper's
-whole query strategy needs rethinking, so fail loud rather than silently
-falling back to the stateful POST form.
+See docs/consulta-sniim.md (ALD-8, ALD-9). If any of these break, the
+scraper's whole query strategy needs rethinking, so fail loud rather than
+silently falling back to the stateful POST form.
 """
 
 import re
+import urllib.error
 import urllib.parse
 import urllib.request
+
+import pytest
 
 RESULTS_URL = (
     "https://www.economia-sniim.gob.mx/nuevo/Consultas/MercadosNacionales"
@@ -87,3 +90,52 @@ def test_pagination_marker_is_present():
     """
     _, html = _get(SAMPLE_QUERY)
     assert re.search(r"Página\s+\d+\s+de\s+\d+", html), "paginator label missing"
+
+
+# --- RegistrosPorPagina limits (ALD-9) ---
+
+# Whole January 2026 for the same product: 769 records, enough to paginate
+# at the server's default page size without downloading megabytes.
+MONTH_QUERY = {**SAMPLE_QUERY, "fechaFinal": "31/01/2026"}
+
+
+def _pages(html: str) -> int:
+    match = re.search(r"Página\s+(-?\d+)\s+de\s+(-?\d+)", html)
+    assert match, "paginator label missing"
+    return int(match.group(2))
+
+
+def test_omitting_page_size_falls_back_to_100():
+    """The scraper must always send the parameter; the default is tiny."""
+    query = {k: v for k, v in MONTH_QUERY.items() if k != "RegistrosPorPagina"}
+    _, html = _get(query)
+    assert _pages(html) > 1
+    assert len(_cells(html)) - 1 == 100
+
+
+def test_negative_page_size_loses_data_silently():
+    """Pins the one failure mode that returns 200 with almost no rows.
+
+    The paginator denominator goes negative instead of erroring, which is
+    why the parser rejects denominators <= 0 rather than just != 1.
+    """
+    status, html = _get({**MONTH_QUERY, "RegistrosPorPagina": "-1"})
+    assert status == 200
+    assert _pages(html) < 0
+    assert len(_cells(html)) - 1 == 1
+
+
+@pytest.mark.parametrize("value", ["0", "abc", "2147483648"])
+def test_invalid_page_sizes_fail_loudly(value):
+    """Zero, non-numeric and Int32 overflow all blow up server-side."""
+    with pytest.raises(urllib.error.HTTPError) as excinfo:
+        _get({**MONTH_QUERY, "RegistrosPorPagina": value})
+    assert excinfo.value.code == 500
+
+
+def test_configured_page_size_returns_one_page():
+    """5000 is what the scraper sends; a month of one product fits in it."""
+    _, html = _get({**MONTH_QUERY, "RegistrosPorPagina": "5000"})
+    assert _pages(html) == 1
+    # 769 records when measured; not pinned exactly, SNIIM may revise history.
+    assert len(_cells(html)) - 1 > 100

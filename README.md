@@ -42,8 +42,10 @@ Cada carpeta está vacía por ahora (solo `.gitkeep`) — issue ALD-5 crea el
 
 El scraper no envía el formulario ASP.NET: va directo por `GET` a la página
 de resultados, con todos los criterios en la cadena de consulta y sin
-cookies. Endpoint, parámetros, restricciones del servidor y evidencia en
-[`docs/consulta-sniim.md`](docs/consulta-sniim.md).
+cookies. Pide `RegistrosPorPagina=5000` y controla el volumen por ventana
+de fechas, subdividiendo cuando el paginador reporta más de una página —
+nunca paginando. Endpoint, parámetros, restricciones del servidor y
+evidencia en [`docs/consulta-sniim.md`](docs/consulta-sniim.md).
 
 ## Setup
 
