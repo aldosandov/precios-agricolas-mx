@@ -281,6 +281,16 @@ fechas, así que en la práctica siempre ve la primera forma. Las demás
 importan para las fixtures (ALD-13) y para que un cambio de estrategia no
 rompa la ingesta en silencio.
 
+Implementado en `scraper/parsers/results.py` (ALD-16). El marcado ayuda: el
+encabezado son celdas `td.titDATtab2`, los datos `td.Datos2` y el separador
+de categoría `td.encabACT2` con `colspan`. Aun así el parser detecta el
+separador por estructura — fila de una sola celda — y no por esa clase ni
+por una lista cerrada de categorías: el PRD ya contaba tres donde hay
+cuatro, y una quinta debe quedar registrada, no reventar. Lo que sí revienta
+es un encabezado desconocido (`UnknownColumn`) y una fila más angosta que su
+encabezado (`UnexpectedResponse`), porque ahí sí se perderían datos sin
+ruido.
+
 ### Filas que no son datos
 
 Entre las filas de datos aparecen **separadores de categoría**: filas de una

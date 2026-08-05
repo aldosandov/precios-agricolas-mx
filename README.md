@@ -36,8 +36,9 @@ docs/                Notas de investigación de la fuente
 .github/workflows/   CI (pendiente de definir)
 ```
 
-Cada carpeta está vacía por ahora (solo `.gitkeep`) — issue ALD-5 crea el
-árbol; los siguientes issues de Fase 1 llenan cada parte.
+De Fase 1 ya están en pie los catálogos, el constructor de consultas y el
+parser de resultados; `spiders/`, `pipelines/`, `transform/` y `app/` siguen
+vacíos y se llenan en los issues siguientes.
 
 ## Cómo se consulta el SNIIM
 
@@ -80,6 +81,40 @@ Resultado versionado en `data/catalogs/market_coverage.csv` (primer y último
 año, huecos y volumen por mercado) con la evidencia por año en
 `market_coverage_by_year.csv`. Hallazgos y método en
 [`docs/profundidad-historica.md`](docs/profundidad-historica.md).
+
+## Parser de resultados
+
+`scraper/parsers/results.py` lee la tabla **por el encabezado de cada
+respuesta**, nunca por posición. No es purismo: todo criterio que la consulta
+fije a un solo valor desaparece de la tabla, así que una consulta de un solo
+día no trae columna `Fecha` y una de todos los productos trae `Producto` y
+`Calidad` en lugar de `Destino`. Un parser posicional no fallaría con esas
+respuestas — escribiría presentaciones en la columna de fecha.
+
+```python
+table = parse_results(html)
+table.columns   # ('date', 'presentation', 'origin', 'destination', ...)
+table.rows[0]   # {'category': 'Hortalizas', 'date': '01/07/2026', ...}
+```
+
+Reglas que sostiene:
+
+- Un encabezado fuera del vocabulario conocido levanta `UnknownColumn` y
+  detiene la ingesta; nunca se descarta en silencio.
+- Los separadores de categoría (`Frutas`, `Frutas de Temporada`,
+  `Hortalizas`, `Chiles Secos`) no son datos: se arrastran como `category` de
+  las filas que siguen.
+- Devuelve los valores como strings, tal cual los sirvió el SNIIM. El tipado
+  y las banderas de calidad son de la capa intermedia de BigQuery, porque la
+  capa cruda es inmutable y la validación marca sin corregir.
+- Distingue las tres respuestas 200 que no son datos: rechazo por criterios
+  (`QueryRejected`), rango sin registros (tabla vacía) y cualquier otra cosa
+  (`UnexpectedResponse`). Nunca lee un cambio del sitio como "no hubo
+  precios".
+
+Los campos que la consulta fijó no salen de aquí: el parser solo reporta lo
+que dijo la respuesta, y el spider agrega lo que él mandó (producto,
+`PreciosPorId`, ventana de fechas).
 
 ## Fixtures
 

@@ -13,14 +13,15 @@ bloqueo.
 
 El PRD marca la Fase 0 como "hecha" pero ningún artefacto había
 materializado — Fase 1 reconstruye eso desde cero antes de tocar BigQuery.
-Cerrados: ALD-5, 7, 8, 9, 10, 11, 12, 13, 14, 15. Sigue ALD-16 (parser por
-encabezado), luego ALD-19, 30.
+Cerrados: ALD-5, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16. Sigue ALD-17
+(validación de contrato), luego ALD-19, 30.
 
 En pie: `scraper/catalogs.py` (regenera `data/catalogs/`),
 `scraper/fixtures.py` (recaptura `tests/fixtures/sniim/`),
 `scraper/query.py` (URL + subdivisión de ventana, puro),
-`scraper/coverage.py` (profundidad histórica por mercado). Todavía vacíos
-`transform/`, `app/`, `scraper/spiders|parsers|pipelines/`.
+`scraper/coverage.py` (profundidad histórica por mercado),
+`scraper/parsers/results.py` (tabla → columnas y filas, por encabezado).
+Todavía vacíos `transform/`, `app/`, `scraper/spiders|pipelines/`.
 
 ## Fuente SNIIM — trampas verificadas
 
