@@ -23,7 +23,7 @@ from __future__ import annotations
 
 import argparse
 import sys
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 
 import scrapy
 
@@ -149,7 +149,7 @@ class DailySpider(scrapy.Spider):
             prices_per_id=prices_per_id,
             window=window,
             source_url=response.url,
-            fetched_at=datetime.now(timezone.utc),
+            fetched_at=datetime.now(UTC),
         )
         table = parse_results(response.text)
         yield from to_raw_rows(build_records(table, context))

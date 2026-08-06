@@ -190,7 +190,7 @@ def scan(
     try:
         writer = csv.writer(handle) if handle else None
         with ThreadPoolExecutor(max_workers=WORKERS) as pool:
-            for job, rows in zip(jobs, pool.map(lambda job: probe(*job), jobs)):
+            for job, rows in zip(jobs, pool.map(lambda job: probe(*job), jobs), strict=True):
                 counts[job] = rows
                 if writer:
                     writer.writerow([job[0], job[1], rows])

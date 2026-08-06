@@ -16,6 +16,7 @@ dependencies = [
 dev = [
     "pytest>=9.1",
     "protego>=0.5",
+    "ruff>=0.14",
 ]
 
 [tool.uv]
@@ -23,3 +24,9 @@ package = false
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "SIM", "ARG"]

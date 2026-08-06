@@ -122,6 +122,9 @@ def parse_results(html: str) -> ParsedTable:
                 f"row has {len(cells)} cells, header declares {len(columns)}"
             )
         parsed.append(
-            {"category": category, **dict(zip(columns, (_text(cell) for cell in cells)))}
+            {
+                "category": category,
+                **dict(zip(columns, (_text(cell) for cell in cells), strict=True)),
+            }
         )
     return ParsedTable(columns, tuple(parsed))

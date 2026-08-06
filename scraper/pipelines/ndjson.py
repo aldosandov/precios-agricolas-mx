@@ -19,9 +19,9 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+from collections.abc import Iterable, Sequence
 from datetime import datetime
 from pathlib import Path
-from typing import Iterable, Sequence
 
 from scraper.contract import RawRecord
 from scraper.coverage import read_destinations
@@ -116,7 +116,9 @@ def to_raw_rows(records: Iterable[RawRecord]) -> list[dict]:
         prices: dict[str, float | None] = {}
         found: list[str] = []
         for field, value in zip(
-            PRICE_FIELDS, (record.price_min, record.price_max, record.price_frequent)
+            PRICE_FIELDS,
+            (record.price_min, record.price_max, record.price_frequent),
+            strict=True,
         ):
             prices[field], flag = _price(value)
             if flag:

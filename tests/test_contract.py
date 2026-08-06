@@ -14,7 +14,7 @@ Runs offline against the ALD-13 fixtures.
 """
 
 from dataclasses import replace
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 
 import pytest
 
@@ -33,12 +33,15 @@ def _table(name: str):
     return parse_results((FIXTURES_DIR / f"{name}.html").read_bytes().decode("utf-8"))
 
 
+WINDOW = DateWindow(date(2026, 7, 1), date(2026, 7, 3))
+
+
 def _context(
     *,
     product_id: str = "740",
     origin_id: str = ALL,
     destination_id: str = ALL,
-    window: DateWindow = DateWindow(date(2026, 7, 1), date(2026, 7, 3)),
+    window: DateWindow = WINDOW,
 ) -> QueryContext:
     return QueryContext(
         product_id=product_id,
@@ -47,7 +50,7 @@ def _context(
         prices_per_id="2",
         window=window,
         source_url="https://example.test/results",
-        fetched_at=datetime(2026, 8, 5, 12, 0, tzinfo=timezone.utc),
+        fetched_at=datetime(2026, 8, 5, 12, 0, tzinfo=UTC),
     )
 
 

@@ -11,7 +11,7 @@ NDJSON that passes contract validation — so it hits the network on purpose.
 
 import json
 import urllib.request
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 
 import pytest
 
@@ -58,7 +58,7 @@ def test_a_real_market_window_passes_contract_validation(response):
             prices_per_id="2",
             window=WINDOW,
             source_url=url,
-            fetched_at=datetime.now(timezone.utc),
+            fetched_at=datetime.now(UTC),
         ),
     )
 
@@ -77,7 +77,7 @@ def test_a_real_market_window_lands_as_valid_ndjson(response, tmp_path):
             prices_per_id="2",
             window=WINDOW,
             source_url=url,
-            fetched_at=datetime.now(timezone.utc),
+            fetched_at=datetime.now(UTC),
         ),
     )
 

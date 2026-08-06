@@ -13,7 +13,7 @@ Runs offline against the ALD-13 fixtures.
 
 import json
 from dataclasses import replace
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 
 from scraper.contract import QueryContext, build_records
 from scraper.fixtures import FIXTURES_DIR
@@ -37,7 +37,7 @@ CONTEXT = QueryContext(
     prices_per_id="2",
     window=DateWindow(date(2026, 7, 1), date(2026, 7, 3)),
     source_url="https://example.test/results",
-    fetched_at=datetime(2026, 8, 5, 12, 0, tzinfo=timezone.utc),
+    fetched_at=datetime(2026, 8, 5, 12, 0, tzinfo=UTC),
 )
 
 

@@ -8,7 +8,7 @@ Skips when there are no credentials, so the offline suite stays runnable.
 """
 
 import uuid
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 
 import pytest
 
@@ -39,7 +39,7 @@ def table(client):
     table_id = f"{PROJECT}.{DATASET}._prueba_carga_{uuid.uuid4().hex[:8]}"
     definition = bigquery.Table(table_id, schema=client.get_table(RAW_TABLE).schema)
     definition.time_partitioning = bigquery.TimePartitioning(field="fecha")
-    definition.expires = datetime.now(timezone.utc) + timedelta(hours=1)
+    definition.expires = datetime.now(UTC) + timedelta(hours=1)
     created = client.create_table(definition)
     yield str(created.reference)
     client.delete_table(table_id, not_found_ok=True)
@@ -58,7 +58,7 @@ def partitions(tmp_path_factory):
             prices_per_id="2",
             window=DateWindow(date(2026, 7, 1), date(2026, 7, 3)),
             source_url="https://example.test/results",
-            fetched_at=datetime(2026, 8, 5, 12, 0, tzinfo=timezone.utc),
+            fetched_at=datetime(2026, 8, 5, 12, 0, tzinfo=UTC),
         ),
     )
     out = tmp_path_factory.mktemp("raw")
@@ -121,7 +121,8 @@ def test_a_revised_price_overwrites_the_one_already_loaded(client, table, partit
     assert revised != 999.99
 
 
-def test_no_staging_tables_are_left_behind(client, table):
+@pytest.mark.usefixtures("table")
+def test_no_staging_tables_are_left_behind(client):
     leftovers = [
         t.table_id
         for t in client.list_tables(f"{PROJECT}.{DATASET}")

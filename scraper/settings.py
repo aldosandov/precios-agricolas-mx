@@ -77,6 +77,4 @@ HTTPCACHE_EXPIRATION_SECS = 0
 # resume, which is the one way this cache could lose data.
 HTTPCACHE_IGNORE_HTTP_CODES = [500, 502, 503, 504, 408, 429]
 
-REQUEST_FINGERPRINTER_IMPLEMENTATION = "2.7"
 TWISTED_REACTOR = "twisted.internet.asyncioreactor.AsyncioSelectorReactor"
-FEED_EXPORT_ENCODING = "utf-8"

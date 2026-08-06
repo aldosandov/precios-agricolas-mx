@@ -15,10 +15,10 @@ import pytest
 from scraper.fixtures import FIXTURES_DIR
 from scraper.query import (
     ALL,
+    RESULTS_URL,
     DateWindow,
     NoPaginator,
     QueryRejected,
-    RESULTS_URL,
     WindowExhausted,
     build_url,
     is_truncated,

@@ -11,7 +11,6 @@ in tests/test_load_raw_live.py.
 """
 
 from datetime import date
-from pathlib import Path
 
 import pytest
 
@@ -22,7 +21,6 @@ from transform.load import (
     partition_dates,
     partition_files,
 )
-
 
 # --- what gets loaded ---
 

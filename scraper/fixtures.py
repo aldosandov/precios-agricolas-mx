@@ -146,7 +146,11 @@ def main(argv: list[str]) -> int:
         return 2
 
     FIXTURES_DIR.mkdir(parents=True, exist_ok=True)
-    manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8")) if MANIFEST_PATH.exists() else {}
+    manifest = (
+        json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
+        if MANIFEST_PATH.exists()
+        else {}
+    )
 
     for name in wanted:
         spec = FIXTURES[name]
@@ -162,7 +166,9 @@ def main(argv: list[str]) -> int:
         print(f"{name}: {len(body)} bytes")
 
     ordered = {key: manifest[key] for key in FIXTURES if key in manifest}
-    MANIFEST_PATH.write_text(json.dumps(ordered, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    MANIFEST_PATH.write_text(
+        json.dumps(ordered, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+    )
     print(f"manifest -> {MANIFEST_PATH}")
     return 0
 

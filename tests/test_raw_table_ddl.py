@@ -27,7 +27,8 @@ def ddl() -> str:
 def columns(ddl: str) -> list[tuple[str, str]]:
     """Every (name, type) declared in the CREATE TABLE body, in order."""
     body = ddl.split("CREATE TABLE", 1)[1].split("(", 1)[1].split("\nPARTITION BY", 1)[0]
-    return re.findall(r"^\s{2}(\w+)\s+([A-Z0-9<>_ ]+?)(?:\s+NOT NULL)?(?:\s+OPTIONS|,|$)", body, re.M)
+    declaration = r"^\s{2}(\w+)\s+([A-Z0-9<>_ ]+?)(?:\s+NOT NULL)?(?:\s+OPTIONS|,|$)"
+    return re.findall(declaration, body, re.M)
 
 
 def test_the_table_declares_exactly_what_the_pipeline_writes(columns):

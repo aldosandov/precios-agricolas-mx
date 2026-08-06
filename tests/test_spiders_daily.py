@@ -16,7 +16,6 @@ import asyncio
 import json
 from datetime import date
 
-import pytest
 from scrapy.http import HtmlResponse, Request
 
 from scraper.fixtures import FIXTURES_DIR
@@ -31,7 +30,7 @@ def _spider(**kwargs) -> DailySpider:
     return DailySpider(destinations=[PUEBLA], **kwargs)
 
 
-def _response(fixture: str, spider: DailySpider, window: DateWindow = WINDOW):
+def _response(fixture: str, window: DateWindow = WINDOW):
     body = (FIXTURES_DIR / f"{fixture}.html").read_bytes()
     request = Request(
         "https://example.test/results",
@@ -45,7 +44,7 @@ def _response(fixture: str, spider: DailySpider, window: DateWindow = WINDOW):
 
 
 def _parse(fixture: str, spider: DailySpider, window: DateWindow = WINDOW) -> list:
-    response = _response(fixture, spider, window)
+    response = _response(fixture, window)
     return list(spider.parse(response, **response.request.cb_kwargs))
 
 
@@ -147,7 +146,7 @@ def test_a_rejected_query_is_recorded_and_does_not_raise():
 
 def test_an_unknown_header_stops_that_market_only():
     spider = _spider()
-    response = _response("range_destination_fixed", spider)
+    response = _response("range_destination_fixed")
     broken = response.replace(body=response.text.replace("Precio Frec", "Precio Modal"))
 
     items = list(spider.parse(broken, **response.request.cb_kwargs))

@@ -19,10 +19,10 @@ from __future__ import annotations
 import argparse
 import sys
 import uuid
+from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
-from typing import Sequence
 
 from scraper.pipelines.ndjson import RAW_DIR, RAW_SCHEMA
 
@@ -92,7 +92,7 @@ def _staging_table(client, target: str):
     project, dataset, table = target.split(".")
     staging_id = f"{project}.{dataset}.{STAGING_PREFIX}{uuid.uuid4().hex[:12]}"
     staging = bigquery.Table(staging_id, schema=client.get_table(target).schema)
-    staging.expires = datetime.now(timezone.utc) + timedelta(hours=STAGING_TTL_HOURS)
+    staging.expires = datetime.now(UTC) + timedelta(hours=STAGING_TTL_HOURS)
     return client.create_table(staging)
 
 
@@ -172,8 +172,8 @@ def main(argv: list[str]) -> int:
 
     report = load(paths, target=args.table)
     print(
-        f"{report.staged_rows} filas en paso -> {report.affected_rows} filas "
-        f"insertadas o actualizadas en {report.table}"
+        f"{report.files} archivo(s), {report.staged_rows} filas en paso -> "
+        f"{report.affected_rows} insertadas o actualizadas en {report.table}"
     )
     return 0
 

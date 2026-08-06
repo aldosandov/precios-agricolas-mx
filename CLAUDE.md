@@ -12,10 +12,14 @@ bloqueo.
 ## Estado actual
 
 El PRD marca la Fase 0 como "hecha" pero ningún artefacto había
-materializado — Fase 1 reconstruye eso desde cero antes de tocar BigQuery.
-Cerrados: ALD-5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21,
-22, 23, 24 (workflow escrito; falta que Aldo lo empuje y lo dispare). Sigue
-ALD-25 (alerta por ausencia de datos), luego ALD-30 y ALD-27.
+materializado — Fase 1 reconstruyó eso desde cero. **Fase 1 completa salvo la
+verificación en Actions**: camino SNIIM → NDJSON → BigQuery funcionando de
+punta a punta.
+
+Cerrados: ALD-5 a ALD-24 (todos). ALD-24 tiene el workflow escrito y GCP
+configurado; falta empujar a `main` y dispararlo una vez. Sigue ALD-25
+(alerta por ausencia de datos), luego ALD-30 (spider de backfill) y ALD-27
+(backfill histórico).
 
 Auth de Actions contra GCP: Workload Identity Federation, ya configurada en
 el proyecto (service account `ingesta-diaria`, pool y proveedor `github`,
@@ -25,17 +29,27 @@ secrets.
 `crudo.precios` existe y está **vacía**: la primera carga real la hará el job
 diario o el backfill, no una corrida manual.
 
-En pie: `scraper/catalogs.py` (regenera `data/catalogs/`),
-`scraper/fixtures.py` (recaptura `tests/fixtures/sniim/`),
-`scraper/query.py` (URL + subdivisión de ventana, puro),
-`scraper/coverage.py` (profundidad histórica por mercado),
-`scraper/parsers/results.py` (tabla → columnas y filas, por encabezado),
-`scraper/contract.py` (registro crudo, llave natural, rechazo),
-`scraper/pipelines/ndjson.py` (fila §10, banderas de calidad, NDJSON por
-fecha en `out/`, no versionado), `scraper/spiders/daily.py` (barrido diario,
-49 mercados × 2 modos, subdivisión y aislamiento por mercado). Proyecto
-Scrapy en `scrapy.cfg` + `scraper/settings.py`. Todavía vacíos `transform/`
-y `app/`; falta el spider de backfill.
+En pie:
+
+| Módulo | Qué hace |
+|---|---|
+| `scraper/catalogs.py` | Regenera `data/catalogs/` desde los `<select>` del formulario |
+| `scraper/fixtures.py` | Recaptura `tests/fixtures/sniim/` + manifiesto |
+| `scraper/coverage.py` | Profundidad histórica por mercado (sondeo barato) |
+| `scraper/query.py` | URL y subdivisión de ventana. Puro, sin red |
+| `scraper/parsers/results.py` | Tabla → columnas y filas, por encabezado |
+| `scraper/contract.py` | Registro crudo, llave natural, rechazo |
+| `scraper/pipelines/ndjson.py` | Fila §10, banderas de calidad, NDJSON por fecha |
+| `scraper/spiders/daily.py` | Barrido diario: 49 mercados × 2 modos |
+| `transform/load.py` | Upsert de NDJSON a la capa cruda |
+| `transform/raw/prices_table.sql` | DDL de `crudo.precios` |
+
+Proyecto Scrapy en `scrapy.cfg` + `scraper/settings.py`; workflow en
+`.github/workflows/daily.yml`. Falta el spider de backfill, `transform/
+canonical|metrics/` y `app/`.
+
+Lint con ruff configurado en `pyproject.toml` (line-length 100). `uv run ruff
+check .` debe pasar limpio antes de commitear.
 
 Ojo con Scrapy ≥2.13: el entry point es `async def start()`. Definir solo
 `start_requests()` no falla — el spider rastrea cero páginas y reporta
@@ -148,6 +162,8 @@ pytest. Dependencias con `uv`/`pip-tools` (`pyproject.toml`).
 - Cada que hagas una tarea actualiza el readme si es necesario. 
 - Cada que sea necesario actualiza el CLAUDE.md
 - Git: commits directos a `dev`; `main` se actualiza al cerrar una fase.
+  Ojo: `workflow_dispatch` solo aparece si el workflow existe en `main`, así
+  que un workflow nuevo no se puede probar sin llevarlo antes a esa rama.
 - Pruebas moderadas y dirigidas a lo que realmente se rompe (parser contra
   fixtures HTML reales, aritmética del precio en parcela, integridad del
   mapeo canónico) — no cobertura formal exhaustiva.
