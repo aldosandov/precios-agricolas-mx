@@ -58,6 +58,10 @@ PRICE_MODES = ("1", "2")
 UNREADABLE = (ParseError, ContractBreach, UnwritableRow, QueryRejected, NoPaginator)
 
 
+class LostRequest(Exception):
+    """A request that never produced a response, after every retry allowed."""
+
+
 class DailySpider(scrapy.Spider):
     name = "daily"
 
@@ -105,12 +109,37 @@ class DailySpider(scrapy.Spider):
                 prices_per_id=prices_per_id,
             ),
             callback=self.parse,
+            errback=self.errback,
             cb_kwargs={
                 "destination_id": destination_id,
                 "prices_per_id": prices_per_id,
                 "window": window,
             },
             dont_filter=True,
+        )
+
+    def errback(self, failure):
+        """A request that never came back is a lost window, not an empty one.
+
+        Scrapy gives up after `RETRY_TIMES`, bumps `retry/max_reached` and
+        moves on. Nothing else notices: the window is not in `failures`, not in
+        the file the monitor reads, and not in the alert. The sweep ends green
+        having quietly skipped a market, which is exactly the shape of failure
+        this ingest is built to make impossible.
+        """
+        request = failure.request
+        # HttpError carries the response it refused; a transport error does not.
+        response = getattr(failure.value, "response", None)
+        detail = f"HTTP {response.status}" if response is not None else repr(failure.value)
+        # Not RETRY_TIMES: robots.txt and a few others are never retried, and
+        # claiming four attempts for a single one would send the next reader
+        # looking at the wrong thing.
+        attempts = request.meta.get("retry_times", 0) + 1
+        self._record(
+            request.cb_kwargs["destination_id"],
+            request.cb_kwargs["prices_per_id"],
+            request.cb_kwargs["window"],
+            LostRequest(f"{detail} tras {attempts} intento(s)"),
         )
 
     def parse(

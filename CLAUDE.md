@@ -20,8 +20,8 @@ Cerrados: ALD-5 a ALD-25 (todos). Quedan dos verificaciones que dependen de
 GitHub: empujar a `main`, disparar el workflow (ALD-24) y confirmar que la
 alerta llega a Sentry con el DSN real (ALD-25).
 
-**Fase 2 en curso.** Cerrados ALD-53 (consola de progreso) y ALD-26 (tabla de
-cobertura y reanudación). Sigue ALD-54 (`errback`), ALD-30 (spider de
+**Fase 2 en curso.** Cerrados ALD-53 (consola de progreso), ALD-26 (tabla de
+cobertura y reanudación) y ALD-54 (`errback`). Sigue ALD-30 (spider de
 backfill), ALD-55 (carga incremental y purga), ALD-56 (`docs/backfill.md`) y
 ALD-27 (la corrida). El backfill **se ejecuta a mano en la laptop**, en
 sesiones de tiempo libre a lo largo de varios días: arrancar y parar es el
@@ -85,6 +85,13 @@ Actions.
 Ojo con Scrapy ≥2.13: el entry point es `async def start()`. Definir solo
 `start_requests()` no falla — el spider rastrea cero páginas y reporta
 `finished`.
+
+Toda petición lleva `errback`. Scrapy no manda al `errback` lo que reintenta:
+agotados los `RETRY_TIMES` devuelve la respuesta, sube `retry/max_reached` y
+sigue; lo que sí llega es el `HttpError` que levanta `HttpErrorMiddleware`
+después, y las excepciones de transporte. Sin `errback` esa ventana no entra a
+`failures`, no llega a `out/failures.txt`, no aparece en Sentry y la corrida
+termina en verde con un mercado de menos (ALD-54).
 
 La consola de progreso (`scraper/console.py`, ALD-53) solo se enciende con
 `PROGRESS_CONSOLE_ENABLED`, y quien la enciende **tiene que fijar `LOG_FILE` en

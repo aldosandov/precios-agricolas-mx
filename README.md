@@ -144,7 +144,11 @@ sea la ventana— solo respuestas más grandes: medido, 5 MB por corrida con un
 día y 25 MB con siete.
 
 Un mercado que falle no le cuesta el día a los otros 48: se anota, el barrido
-sigue y el proceso termina en rojo.
+sigue y el proceso termina en rojo. Eso incluye la petición que se rinde tras
+agotar sus reintentos —un 503 sostenido, un timeout—: Scrapy la deja ir sin más
+que una línea de log, así que un `errback` la anota igual que a una respuesta
+ilegible. Sin eso el mercado desaparecería del día y la corrida terminaría en
+verde, que es justo la forma de falla que esta ingesta existe para no tener.
 
 La ventana se calcula con la fecha **del centro de México**, no la de la
 máquina que corre el barrido: en un runner en UTC, después de las 18:00 hora

@@ -14,13 +14,23 @@ Runs offline against the ALD-13 fixtures; the reactor never starts.
 
 import asyncio
 import json
+import os
+import subprocess
+import sys
+import textwrap
 from datetime import date
+from pathlib import Path
 
-from scrapy.http import HtmlResponse, Request
+from scrapy.http import HtmlResponse, Request, Response
+from scrapy.spidermiddlewares.httperror import HttpError
+from twisted.internet.error import TimeoutError as TransportTimeout
+from twisted.python.failure import Failure
 
 from scraper.fixtures import FIXTURES_DIR
 from scraper.query import DateWindow
 from scraper.spiders.daily import DailySpider
+
+REPO = Path(__file__).resolve().parent.parent
 
 WINDOW = DateWindow(date(2026, 7, 1), date(2026, 7, 3))
 PUEBLA = "210"
@@ -172,6 +182,113 @@ def test_a_single_day_that_still_overflows_is_a_failure_not_a_silent_loss():
 
     assert yielded == []
     assert len(spider.failures) == 1
+
+
+# --- requests that never come back (ALD-54) ---
+
+
+def _failed(spider, error, *, retries=0) -> Failure:
+    request = spider.plan_requests()[0]
+    request.meta["retry_times"] = retries
+    failure = Failure(error)
+    failure.request = request
+    return failure
+
+
+def test_every_request_carries_an_errback():
+    """Without one, a request that gives up is a stat and nothing else."""
+    spider = _spider(days=1)
+
+    assert all(request.errback == spider.errback for request in spider.plan_requests())
+
+
+def test_a_request_that_gave_up_is_recorded_with_its_status_and_its_window():
+    spider = _spider(days=1)
+    response = Response("https://example.test/results", status=503)
+
+    spider.errback(_failed(spider, HttpError(response), retries=3))
+
+    assert len(spider.failures) == 1
+    assert "HTTP 503" in spider.failures[0]
+    assert "tras 4 intento(s)" in spider.failures[0]
+    assert f"destino={PUEBLA}" in spider.failures[0]
+
+
+def test_a_transport_error_is_recorded_too_even_without_a_response():
+    """A timeout loses the window exactly as thoroughly as a 503 does."""
+    spider = _spider(days=1)
+
+    spider.errback(_failed(spider, TransportTimeout("timed out")))
+
+    assert "TimeoutError" in spider.failures[0]
+
+
+def test_the_attempts_reported_are_the_ones_that_happened():
+    """Robots and a few others are never retried; claiming four attempts for
+    one would send the next reader looking at the wrong thing."""
+    spider = _spider(days=1)
+
+    spider.errback(_failed(spider, TransportTimeout("timed out")))
+
+    assert "tras 1 intento(s)" in spider.failures[0]
+
+
+def test_a_run_where_every_request_gives_up_ends_red_with_every_window_named(tmp_path):
+    """The whole point, end to end and through the real reactor: a source that
+    answers 503 to everything must not produce a green run and an empty day."""
+    (tmp_path / "fake_downloader.py").write_text(
+        textwrap.dedent("""
+            from scrapy.http import Response
+
+
+            class Always503:
+                \"\"\"Answers every request without touching the network.\"\"\"
+
+                def process_request(self, request, spider):
+                    return Response(request.url, status=503, request=request)
+        """),
+        encoding="utf-8",
+    )
+    (tmp_path / "corrida.py").write_text(
+        textwrap.dedent("""
+            import sys
+            from pathlib import Path
+
+            import scrapy.utils.project as project
+
+            out = Path(sys.argv[1])
+            loaded = project.get_project_settings()
+            loaded.set("DOWNLOADER_MIDDLEWARES", {"fake_downloader.Always503": 1})
+            loaded.set("RETRY_TIMES", 1)
+            loaded.set("DOWNLOAD_DELAY", 0)
+            loaded.set("AUTOTHROTTLE_ENABLED", False)
+            loaded.set("ROBOTSTXT_OBEY", False)
+            loaded.set("RAW_OUTPUT_DIR", str(out / "raw"))
+            loaded.set("LOG_LEVEL", "ERROR")
+            project.get_project_settings = lambda: loaded
+
+            from scraper.spiders import daily
+
+            daily.FAILURES_PATH = out / "failures.txt"
+            sys.exit(daily.main(["--days", "1", "--market", "210"]))
+        """),
+        encoding="utf-8",
+    )
+
+    run = subprocess.run(
+        [sys.executable, str(tmp_path / "corrida.py"), str(tmp_path)],
+        cwd=REPO,
+        env={"PYTHONPATH": f"{tmp_path}{os.pathsep}{REPO}", "PATH": os.environ["PATH"]},
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+
+    assert run.returncode == 1, run.stderr[-2000:]
+    lines = (tmp_path / "failures.txt").read_text(encoding="utf-8").splitlines()
+    # Both price modes of the one market asked for, neither lost in silence.
+    assert len(lines) == 2
+    assert all("HTTP 503" in line and f"destino={PUEBLA}" in line for line in lines)
 
 
 # --- the run's verdict ---
