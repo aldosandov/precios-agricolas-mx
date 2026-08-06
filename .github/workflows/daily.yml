@@ -18,7 +18,7 @@ on:
     inputs:
       days:
         description: "Días hacia atrás que cubre la ventana"
-        default: "7"
+        default: "5"
       market:
         description: "Id de un mercado; vacío = los 49"
         default: ""
@@ -68,7 +68,7 @@ jobs:
         continue-on-error: true
         run: |
           uv run python -m scraper.spiders.daily \
-            --days "${{ inputs.days || '7' }}" \
+            --days "${{ inputs.days || '5' }}" \
             ${{ inputs.market && format('--market {0}', inputs.market) || '' }}
 
       - name: Cargar a la capa cruda
@@ -97,7 +97,7 @@ jobs:
           SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
         run: |
           uv run python -m transform.monitor \
-            --days "${{ inputs.days || '7' }}" \
+            --days "${{ inputs.days || '5' }}" \
             --outcome ${{ steps.barrido.outcome == 'success' && 'ok' || 'error' }}
 
       - name: Fallar si algún mercado se cayó

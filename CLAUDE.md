@@ -47,7 +47,7 @@ En pie:
 | `scraper/parsers/results.py` | Tabla → columnas y filas, por encabezado |
 | `scraper/contract.py` | Registro crudo, llave natural, rechazo |
 | `scraper/pipelines/ndjson.py` | Fila §10, banderas de calidad, NDJSON por fecha |
-| `scraper/spiders/daily.py` | Barrido diario: 49 mercados × 2 modos |
+| `scraper/spiders/daily.py` | Barrido diario: 43 mercados activos × 2 modos, ventana de 5 días |
 | `transform/load.py` | Upsert de NDJSON a la capa cruda |
 | `transform/raw/prices_table.sql` | DDL de `crudo.precios` |
 | `transform/monitor.py` | Reporte de cobertura y alertas a Sentry |
@@ -58,6 +58,14 @@ canonical|metrics/` y `app/`.
 
 Lint con ruff configurado en `pyproject.toml` (line-length 100). `uv run ruff
 check .` debe pasar limpio antes de commitear.
+
+El barrido diario pide solo los **43 mercados activos** (`coverage.active_markets()`),
+no los 49 del catálogo: seis llevan años sin publicar. Riesgo aceptado: un
+mercado que reviva queda invisible hasta que se vuelva a correr
+`scraper.coverage`. La ventana es de 5 días —el fin de semana se come dos, y
+desde un lunes hay que alcanzar el jueves anterior—. Ampliarla no cuesta
+peticiones (86 fijas), solo bytes: medido, 5 MB por corrida con 1 día, 15 MB
+con 3 y 25 MB con 7.
 
 **La fecha es la de México, no la del runner.** Los runners de Actions van en
 UTC y el SNIIM publica en hora del centro de México: después de las 18:00

@@ -17,7 +17,6 @@ Usage:
 from __future__ import annotations
 
 import argparse
-import csv
 import json
 import os
 import sys
@@ -26,19 +25,10 @@ from dataclasses import dataclass, field
 from datetime import date, timedelta
 from pathlib import Path
 
+from scraper.coverage import active_markets
 from scraper.query import source_date
 from scraper.spiders.daily import FAILURES_PATH
 from transform.load import RAW_TABLE
-
-COVERAGE_PATH = (
-    Path(__file__).resolve().parent.parent / "data" / "catalogs" / "market_coverage.csv"
-)
-
-# A market that reported at some point in the last two years is expected to
-# keep reporting. Below that it is one of the seven the coverage scan found
-# dead or retired (ALD-14), and alerting on those daily would only teach us to
-# ignore the alert.
-ACTIVE_SINCE_YEARS = 2
 
 # Two business days behind is a late publication; three is a source that
 # stopped. Mexican holidays are not modelled — the threshold absorbs them.
@@ -76,21 +66,6 @@ class Alert:
     level: str
     message: str
     context: dict = field(default_factory=dict)
-
-
-def active_markets(path: Path = COVERAGE_PATH, today: date | None = None) -> tuple[str, ...]:
-    """Markets that should be reporting, per the coverage scan of ALD-14.
-
-    Being in the catalog does not mean having data: two markets never had any
-    and five stopped years ago.
-    """
-    floor = (today or source_date()).year - ACTIVE_SINCE_YEARS
-    with path.open(encoding="utf-8", newline="") as handle:
-        return tuple(
-            row["destination_id"]
-            for row in csv.DictReader(handle)
-            if row["last_year"] and int(row["last_year"]) > floor
-        )
 
 
 def business_days_between(start: date, end: date) -> int:
@@ -248,7 +223,7 @@ def read_run(client, *, table: str, start: date, end: date) -> RunReport:
 
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--days", type=int, default=7)
+    parser.add_argument("--days", type=int, default=5)
     parser.add_argument("--table", default=RAW_TABLE)
     parser.add_argument(
         "--outcome",

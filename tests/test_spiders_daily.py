@@ -57,8 +57,16 @@ def test_every_market_is_asked_for_both_price_modes():
     modes = {request.cb_kwargs["prices_per_id"] for request in requests}
     markets = {request.cb_kwargs["destination_id"] for request in requests}
     assert modes == {"1", "2"}
-    assert len(markets) == 49
-    assert len(requests) == 98
+    assert len(markets) == 43
+    assert len(requests) == 86
+
+
+def test_markets_that_stopped_reporting_are_not_asked_at_all():
+    """Six of the 49 have not published in years; asking them daily is a tenth
+    of the sweep spent on rows that do not exist."""
+    markets = {r.cb_kwargs["destination_id"] for r in DailySpider(days=1).plan_requests()}
+
+    assert markets.isdisjoint({"71", "122", "102", "111", "112", "231"})
 
 
 def test_the_planned_requests_are_what_scrapy_actually_starts_with():

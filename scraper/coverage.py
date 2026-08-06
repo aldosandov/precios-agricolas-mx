@@ -48,6 +48,11 @@ CATALOGS_DIR = Path(__file__).resolve().parent.parent / "data" / "catalogs"
 DESTINATIONS_PATH = CATALOGS_DIR / "destinations.csv"
 BY_YEAR_PATH = CATALOGS_DIR / "market_coverage_by_year.csv"
 SUMMARY_PATH = CATALOGS_DIR / "market_coverage.csv"
+
+# A market that reported within the last two years is expected to keep
+# reporting. Below that it is one of the seven this scan found dead or retired,
+# and asking it every day is 12 requests a day for rows that do not exist.
+ACTIVE_SINCE_YEARS = 2
 # Written as the scan advances and deleted when it finishes; not versioned.
 CHECKPOINT_PATH = CATALOGS_DIR / "market_coverage.partial.csv"
 
@@ -87,6 +92,23 @@ class Destination:
 def read_destinations(path: Path = DESTINATIONS_PATH) -> list[Destination]:
     with path.open(encoding="utf-8", newline="") as handle:
         return [Destination(**row) for row in csv.DictReader(handle)]
+
+
+def active_markets(path: Path = SUMMARY_PATH, today: date | None = None) -> tuple[str, ...]:
+    """Markets still worth asking for, measured rather than assumed.
+
+    Being in the catalog does not mean having data: two markets never had any
+    and five stopped years ago. A market that comes back to life stays invisible
+    until this scan runs again — the trade the daily sweep accepts for not
+    spending a tenth of its requests on the dead.
+    """
+    floor = (today or date.today()).year - ACTIVE_SINCE_YEARS
+    with path.open(encoding="utf-8", newline="") as handle:
+        return tuple(
+            row["destination_id"]
+            for row in csv.DictReader(handle)
+            if row["last_year"] and int(row["last_year"]) > floor
+        )
 
 
 def build_probe_url(destination_id: str, year: int) -> str:
