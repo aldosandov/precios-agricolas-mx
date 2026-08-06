@@ -14,7 +14,13 @@ bloqueo.
 El PRD marca la Fase 0 como "hecha" pero ningún artefacto había
 materializado — Fase 1 reconstruye eso desde cero antes de tocar BigQuery.
 Cerrados: ALD-5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21,
-22, 23. Sigue ALD-24 (GitHub Actions del job diario), luego ALD-30 y ALD-27.
+22, 23, 24 (workflow escrito; falta que Aldo lo empuje y lo dispare). Sigue
+ALD-25 (alerta por ausencia de datos), luego ALD-30 y ALD-27.
+
+Auth de Actions contra GCP: Workload Identity Federation, ya configurada en
+el proyecto (service account `ingesta-diaria`, pool y proveedor `github`,
+restringida al repo `aldosandov/precios-agricolas-mx`). Sin llaves ni
+secrets.
 
 `crudo.precios` existe y está **vacía**: la primera carga real la hará el job
 diario o el backfill, no una corrida manual.

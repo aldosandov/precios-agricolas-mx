@@ -298,6 +298,35 @@ Correr la misma carga dos veces no cambia el conteo de filas — verificado
 contra BigQuery real en `tests/test_load_raw_live.py`, que también comprueba
 que un precio revisado sobrescribe al anterior.
 
+## Job diario en GitHub Actions
+
+[`.github/workflows/daily.yml`](.github/workflows/daily.yml). Corre a las
+**23:00 UTC de lunes a viernes** (17:00 en el centro de México, con el día
+hábil ya publicado) y también a mano desde la pestaña Actions, con la ventana
+y el mercado como parámetros.
+
+Un job de una tarea al día no justifica un orquestador con base de datos,
+planificador y trabajadores (§8.9). Los reintentos que importan ya viven en
+Scrapy, que reintenta los 503 cuatro veces con autothrottle.
+
+Tres decisiones que evitan fallos silenciosos:
+
+- **Un mercado caído no cancela la carga.** El barrido sale distinto de cero
+  si algún mercado falló, pero el paso está en `continue-on-error` y el fallo
+  se arrastra hasta el último paso. Lo que capturaron los otros 48 llega a
+  BigQuery igual, y la corrida termina en rojo.
+- **Una ventana sin precios no es un fallo.** Si no hay archivos, la carga se
+  salta. Que no haya datos nuevos lo vigila la alerta, no el código de salida.
+- **Sin llaves.** Se autentica con Workload Identity Federation: GitHub emite
+  un token OIDC y GCP lo cambia por credenciales de la service account
+  `ingesta-diaria`. No hay ningún secret que rotar, y la federación está
+  restringida a este repositorio.
+
+El NDJSON de cada corrida queda como artifact 7 días, para poder recargar sin
+volver a pedirle nada al SNIIM.
+
+El backfill histórico **no** corre aquí: se ejecuta a mano una sola vez.
+
 ## Fixtures
 
 El parser se prueba contra HTML real guardado, nunca inventado. Las
