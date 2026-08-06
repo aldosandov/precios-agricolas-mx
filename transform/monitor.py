@@ -26,6 +26,7 @@ from dataclasses import dataclass, field
 from datetime import date, timedelta
 from pathlib import Path
 
+from scraper.query import source_date
 from scraper.spiders.daily import FAILURES_PATH
 from transform.load import RAW_TABLE
 
@@ -83,7 +84,7 @@ def active_markets(path: Path = COVERAGE_PATH, today: date | None = None) -> tup
     Being in the catalog does not mean having data: two markets never had any
     and five stopped years ago.
     """
-    floor = (today or date.today()).year - ACTIVE_SINCE_YEARS
+    floor = (today or source_date()).year - ACTIVE_SINCE_YEARS
     with path.open(encoding="utf-8", newline="") as handle:
         return tuple(
             row["destination_id"]
@@ -266,7 +267,7 @@ def main(argv: list[str]) -> int:
 
     from google.cloud import bigquery
 
-    today = date.today()
+    today = source_date()
     start = today - timedelta(days=args.days - 1)
     client = bigquery.Client(project=args.table.split(".")[0])
     report = read_run(client, table=args.table, start=start, end=today)
