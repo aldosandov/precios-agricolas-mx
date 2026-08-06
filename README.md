@@ -175,6 +175,36 @@ y el barrido sigue; al final el proceso sale con código distinto de cero para
 que Actions marque el job en rojo. Perder un día es irrecuperable, pero un
 cambio de esquema que nadie note también.
 
+## Cortesía con la fuente
+
+El SNIIM es un servidor de la Secretaría de Economía y responde **503** cuando
+se le exige. El proyecto no tiene prisa que justifique arriesgarlo, así que el
+crawl es lento a propósito (`scraper/settings.py`):
+
+| Ajuste | Valor | Por qué |
+|---|---|---|
+| `CONCURRENT_REQUESTS(_PER_DOMAIN)` | 2 | Techo, no meta |
+| `DOWNLOAD_DELAY` / `AUTOTHROTTLE_START_DELAY` | 3 s | Piso entre peticiones |
+| `AUTOTHROTTLE_TARGET_CONCURRENCY` | 1.0 | Una petición en vuelo en promedio |
+| `AUTOTHROTTLE_MAX_DELAY` | 120 s | Un 503 tarda minutos en despejarse |
+| `USER_AGENT` | `precios-agricolas-mx/0.1 (+URL del repo)` | Identificable, con dónde reclamar |
+
+Medido en una corrida real de tres mercados: 6 peticiones en 29.5 s, con
+separaciones de 3 a 7 segundos. Autothrottle sube el intervalo solo cuando el
+servidor tarda más en contestar.
+
+La **caché HTTP** existe para el backfill, que corre horas y no puede volver a
+descargar lo que ya trajo. Está apagada por defecto: la corrida diaria tiene
+que ver los precios de hoy, no la copia de ayer. Se prende con `--cache`:
+
+```bash
+uv run python -m scraper.spiders.daily --days 1 --market 10 --cache
+```
+
+La segunda corrida del ejemplo tarda 0.15 s en vez de 13.7 s y produce las
+mismas 120 filas. Los 5xx nunca se cachean: un 503 guardado reaparecería como
+ventana perdida en cada reanudación. `httpcache/` no se versiona.
+
 ## Salida: NDJSON particionado por fecha
 
 `scraper/pipelines/ndjson.py` convierte los registros del contrato en la fila

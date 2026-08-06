@@ -13,8 +13,8 @@ bloqueo.
 
 El PRD marca la Fase 0 como "hecha" pero ningún artefacto había
 materializado — Fase 1 reconstruye eso desde cero antes de tocar BigQuery.
-Cerrados: ALD-5, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19. Sigue
-ALD-20 (autothrottle, caché HTTP, user agent), luego ALD-30 y ALD-23.
+Cerrados: ALD-5, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20. Sigue
+ALD-21 (primera corrida real contra un mercado), luego ALD-30 y ALD-23.
 
 En pie: `scraper/catalogs.py` (regenera `data/catalogs/`),
 `scraper/fixtures.py` (recaptura `tests/fixtures/sniim/`),

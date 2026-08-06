@@ -181,9 +181,20 @@ def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--days", type=int, default=DEFAULT_DAYS)
     parser.add_argument("--market", action="append", dest="markets")
+    parser.add_argument(
+        "--cache",
+        action="store_true",
+        help="servir de la caché HTTP lo ya descargado (para repetir sin "
+        "volver a pedirle al SNIIM); apagada por defecto porque la corrida "
+        "diaria tiene que ver los precios de hoy",
+    )
     args = parser.parse_args(argv)
 
-    process = CrawlerProcess(get_project_settings())
+    settings = get_project_settings()
+    if args.cache:
+        settings.set("HTTPCACHE_ENABLED", True)
+
+    process = CrawlerProcess(settings)
     crawler = process.create_crawler(DailySpider)
     process.crawl(crawler, days=args.days, destinations=args.markets)
     process.start()

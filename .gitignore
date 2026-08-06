@@ -259,3 +259,4 @@ data/catalogs/market_coverage.partial.csv
 
 # Salida de la ingesta: NDJSON crudo, se carga a BigQuery y no se versiona
 out/
+httpcache/
