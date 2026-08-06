@@ -16,8 +16,9 @@ from __future__ import annotations
 import html as html_module
 import re
 from dataclasses import dataclass
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from urllib.parse import urlencode
+from zoneinfo import ZoneInfo
 
 RESULTS_URL = (
     "https://www.economia-sniim.gob.mx/nuevo/Consultas/MercadosNacionales"
@@ -37,6 +38,11 @@ PRICES_PER_KILOGRAM = "2"
 RECORDS_PER_PAGE = 5000
 
 DATE_FORMAT = "%d/%m/%Y"
+
+# The SNIIM publishes on Mexico City time and the runners are on UTC. After
+# 18:00 in Mexico the two calendars disagree, so asking for "today" by the
+# machine's clock requests a day the source has not published yet.
+SOURCE_TIMEZONE = ZoneInfo("America/Mexico_City")
 
 # The server rejects the fully unconstrained query with this text, in a 200.
 REJECTION_MARKER = "No puede seleccionar todos los productos"
@@ -86,6 +92,11 @@ class DateWindow:
             DateWindow(self.start, midpoint),
             DateWindow(midpoint + timedelta(days=1), self.end),
         )
+
+
+def source_date(moment: datetime | None = None) -> date:
+    """Today according to the source, not according to whoever is asking."""
+    return (moment or datetime.now(SOURCE_TIMEZONE)).astimezone(SOURCE_TIMEZONE).date()
 
 
 def quarter_start(day: date) -> date:

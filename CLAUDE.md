@@ -59,6 +59,13 @@ canonical|metrics/` y `app/`.
 Lint con ruff configurado en `pyproject.toml` (line-length 100). `uv run ruff
 check .` debe pasar limpio antes de commitear.
 
+**La fecha es la de México, no la del runner.** Los runners de Actions van en
+UTC y el SNIIM publica en hora del centro de México: después de las 18:00
+local, `date.today()` del runner ya es el día siguiente y pide un día que la
+fuente no ha publicado (cero filas, job en verde). Todo lo que necesite "hoy"
+usa `scraper.query.source_date()`. Encontrado en la primera corrida real en
+Actions.
+
 Ojo con Scrapy ≥2.13: el entry point es `async def start()`. Definir solo
 `start_requests()` no falla — el spider rastrea cero páginas y reporta
 `finished`.

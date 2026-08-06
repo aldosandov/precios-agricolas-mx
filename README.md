@@ -134,6 +134,10 @@ de los dos contestó. Deja los archivos en `out/raw/fecha=YYYY-MM-DD/`.
 Un mercado que falle no le cuesta el día a los otros 48: se anota, el barrido
 sigue y el proceso termina en rojo.
 
+La ventana se calcula con la fecha **del centro de México**, no la de la
+máquina que corre el barrido: en un runner en UTC, después de las 18:00 hora
+local ya es el día siguiente y se pediría un día que la fuente aún no publica.
+
 ### Carga a BigQuery
 
 ```bash

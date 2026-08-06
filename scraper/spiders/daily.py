@@ -39,6 +39,7 @@ from scraper.query import (
     WindowExhausted,
     build_url,
     next_windows,
+    source_date,
 )
 
 # Several days back: the source sometimes publishes late, and reprocessing a
@@ -71,7 +72,7 @@ class DailySpider(scrapy.Spider):
         span = int(days)
         if span < 1:
             raise ValueError(f"days must be positive, got {span}")
-        last_day = end or date.today()
+        last_day = end or source_date()
         self.window = DateWindow(last_day - timedelta(days=span - 1), last_day)
         self.destination_ids = destinations or [
             dest.destination_id for dest in read_destinations()
