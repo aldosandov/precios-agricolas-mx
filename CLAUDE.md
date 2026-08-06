@@ -13,15 +13,23 @@ bloqueo.
 
 El PRD marca la Fase 0 como "hecha" pero ningún artefacto había
 materializado — Fase 1 reconstruye eso desde cero antes de tocar BigQuery.
-Cerrados: ALD-5, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16. Sigue ALD-17
-(validación de contrato), luego ALD-19, 30.
+Cerrados: ALD-5, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17. Sigue ALD-18
+(pipeline a NDJSON particionado), luego ALD-19, 30.
 
 En pie: `scraper/catalogs.py` (regenera `data/catalogs/`),
 `scraper/fixtures.py` (recaptura `tests/fixtures/sniim/`),
 `scraper/query.py` (URL + subdivisión de ventana, puro),
 `scraper/coverage.py` (profundidad histórica por mercado),
-`scraper/parsers/results.py` (tabla → columnas y filas, por encabezado).
+`scraper/parsers/results.py` (tabla → columnas y filas, por encabezado),
+`scraper/contract.py` (registro crudo, llave natural, rechazo).
 Todavía vacíos `transform/`, `app/`, `scraper/spiders|pipelines/`.
+
+El registro crudo guarda cada criterio en dos planos: la etiqueta que dio la
+tabla y el id que se envió. La llave natural es
+`(date, product, presentation, origin, destination, prices_per_id)`, con la
+etiqueta cuando existe y `id:<n>` cuando la consulta fijó ese criterio. El
+contrato exige identidad, no valores: un precio faltante lo marca la capa
+intermedia, no lo rechaza la ingesta.
 
 ## Fuente SNIIM — trampas verificadas
 

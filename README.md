@@ -116,6 +116,39 @@ Los campos que la consulta fijó no salen de aquí: el parser solo reporta lo
 que dijo la respuesta, y el spider agrega lo que él mandó (producto,
 `PreciosPorId`, ventana de fechas).
 
+## Contrato de la capa cruda
+
+`scraper/contract.py` arma el registro que se escribe, mezclando lo que dijo
+la tabla con lo que mandó la consulta, y rechaza lo que no puede ser una
+observación de precio.
+
+```python
+records = build_records(table, QueryContext(product_id="740", ..., window=w))
+records[0].natural_key
+# ('01/07/2026', 'id:740', 'Kilogramo', 'Guanajuato',
+#  'Aguascalientes: Centro Comercial Agropecuario de Aguascalientes', '2')
+```
+
+Cada criterio queda registrado en dos planos: la etiqueta que sirvió la tabla
+(`product`, `origin`, `destination`, `None` si la consulta lo fijó) y el id
+que se envió (`product_id`, `origin_id`, `destination_id`). La llave natural
+usa la etiqueta si la hay y si no `id:<n>`; `-1` no identifica nada, porque
+significa "todos".
+
+Qué exige el contrato: fecha, presentación, identidad de producto, origen y
+destino, y el modo de precio. Faltar cualquiera levanta `IncompleteRow`
+nombrando todos los que faltan, y dos filas de una misma respuesta con la
+misma llave levantan `DuplicateNaturalKey`. Se detiene en vez de descartar:
+una fila descartada deja un hueco idéntico a un día que el mercado no reportó.
+
+La fecha sale de la tabla, salvo en una consulta de un solo día —que no trae
+columna `Fecha`—, donde sale de la ventana. Una ventana más ancha sin esa
+columna no es atribuible y detiene la ingesta.
+
+**Los precios no entran al contrato.** Un precio faltante es calidad de dato:
+lo marca la capa intermedia, que nunca corrige. El contrato es sobre
+identidad, no sobre valores.
+
 ## Fixtures
 
 El parser se prueba contra HTML real guardado, nunca inventado. Las
