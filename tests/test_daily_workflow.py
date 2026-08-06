@@ -64,6 +64,15 @@ def test_the_load_is_skipped_when_the_window_had_no_prices(workflow):
     assert "hashFiles('out/raw/**/*.ndjson') != ''" in workflow
 
 
+def test_the_coverage_report_runs_even_when_the_sweep_failed(workflow):
+    """The run worth reporting the most is the one that broke."""
+    monitor = workflow.index("transform.monitor")
+    block = workflow[workflow.rindex("- name:", 0, monitor) : monitor]
+
+    assert "if: always()" in block
+    assert "continue-on-error: true" in block
+
+
 def test_the_run_still_ends_red_when_the_sweep_failed(workflow):
     """Otherwise a schema change repeats for days behind a green check."""
     assert re.search(r"steps\.\w+\.outcome\s*==\s*'failure'", workflow)

@@ -10,6 +10,7 @@ dependencies = [
     "google-cloud-bigquery>=3.42",
     "streamlit>=1.61",
     "plotly>=6.9",
+    "sentry-sdk>=2.30",
 ]
 
 [dependency-groups]

@@ -85,6 +85,19 @@ jobs:
           retention-days: 7
           if-no-files-found: warn
 
+      - name: Reportar cobertura a Sentry
+        # Corre siempre: la corrida que más hay que reportar es justo la que
+        # falló. Y no tumba el job — un fallo del monitoreo no puede valer más
+        # que la ingesta que vigila.
+        if: always()
+        continue-on-error: true
+        env:
+          SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
+        run: |
+          uv run python -m transform.monitor \
+            --days "${{ inputs.days || '7' }}" \
+            --outcome ${{ steps.barrido.outcome == 'success' && 'ok' || 'error' }}
+
       - name: Fallar si algún mercado se cayó
         # Un encabezado nuevo o un rechazo tienen que verse en rojo: si no, el
         # cambio se repite durante días detrás de una palomita verde.

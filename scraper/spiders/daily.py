@@ -30,7 +30,7 @@ import scrapy
 from scraper.contract import ContractBreach, QueryContext, build_records
 from scraper.coverage import read_destinations
 from scraper.parsers.results import EMPTY_MARKER, ParseError, parse_results
-from scraper.pipelines.ndjson import UnwritableRow, to_raw_rows
+from scraper.pipelines.ndjson import RAW_DIR, UnwritableRow, to_raw_rows
 from scraper.query import (
     ALL,
     DateWindow,
@@ -44,6 +44,10 @@ from scraper.query import (
 # Several days back: the source sometimes publishes late, and reprocessing a
 # day is free because the load is idempotent (PRD §8.9).
 DEFAULT_DAYS = 7
+
+# Where the sweep leaves the windows it could not read, for the monitoring step
+# to report them one by one instead of as a count.
+FAILURES_PATH = RAW_DIR.parent / "failures.txt"
 
 PRICE_MODES = ("1", "2")
 
@@ -198,6 +202,15 @@ def main(argv: list[str]) -> int:
     crawler = process.create_crawler(DailySpider)
     process.crawl(crawler, days=args.days, destinations=args.markets)
     process.start()
+
+    # The failures are written down, not just logged: the monitoring step runs
+    # in another process and has to say which windows broke, not only how many.
+    detail = list(getattr(crawler.spider, "failures", []))
+    if detail:
+        FAILURES_PATH.parent.mkdir(parents=True, exist_ok=True)
+        FAILURES_PATH.write_text("\n".join(detail) + "\n", encoding="utf-8")
+    elif FAILURES_PATH.exists():
+        FAILURES_PATH.unlink()
 
     failures = crawler.stats.get_value("ingest/failed_windows", 0)
     if failures:

@@ -160,6 +160,35 @@ El parser se prueba contra HTML real guardado en `tests/fixtures/sniim/`, con
 un manifiesto que registra la URL exacta que produjo cada respuesta. Nunca
 contra marcado inventado: el marcado inventado le da la razón al parser.
 
+### Trazabilidad de cada corrida
+
+```bash
+uv run python -m transform.monitor --days 7 --dry-run   # imprimir sin enviar
+uv run python -m transform.monitor --days 7             # requiere SENTRY_DSN
+```
+
+Una ingesta que deja de capturar en silencio se ve igual que una fuente que
+dejó de publicar, y las dos se ven como un job en verde. Así que cada corrida
+consulta BigQuery —no el log del spider— y reporta a Sentry qué se tiene y qué
+falta:
+
+| Señal | Cuándo |
+|---|---|
+| Resumen: filas, mercados y fechas cubiertas | siempre |
+| Mercados activos sin una sola fila en la ventana | cuando falta alguno |
+| Ventana entera vacía | cuando no llegó nada |
+| Sin fecha nueva en 3 días hábiles o más | fuente detenida |
+| Ventanas que reventaron en el barrido | cuando las hay |
+
+Los "mercados activos" salen de `market_coverage.csv`: los dos que nunca
+tuvieron datos y los cinco que dejaron de reportar quedan fuera, porque una
+alerta que suena todos los días deja de leerse. Los días hábiles se cuentan de
+lunes a viernes; los feriados no se modelan, el umbral los absorbe.
+
+La corrida además hace *check-in* en un monitor de Sentry que conoce el
+horario, así que también avisa del caso que ningún log detecta: **el job que
+nunca corrió**.
+
 ## Automatización
 
 [`.github/workflows/daily.yml`](.github/workflows/daily.yml) corre el barrido y

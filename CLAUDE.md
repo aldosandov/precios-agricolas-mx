@@ -16,10 +16,17 @@ materializado — Fase 1 reconstruyó eso desde cero. **Fase 1 completa salvo la
 verificación en Actions**: camino SNIIM → NDJSON → BigQuery funcionando de
 punta a punta.
 
-Cerrados: ALD-5 a ALD-24 (todos). ALD-24 tiene el workflow escrito y GCP
-configurado; falta empujar a `main` y dispararlo una vez. Sigue ALD-25
-(alerta por ausencia de datos), luego ALD-30 (spider de backfill) y ALD-27
-(backfill histórico).
+Cerrados: ALD-5 a ALD-25 (todos). Quedan dos verificaciones que dependen de
+GitHub: empujar a `main`, disparar el workflow (ALD-24) y confirmar que la
+alerta llega a Sentry con el DSN real (ALD-25). Sigue ALD-30 (spider de
+backfill) y ALD-27 (backfill histórico).
+
+Observabilidad: `transform/monitor.py` consulta BigQuery después de cada
+corrida y manda a Sentry el resumen, los mercados activos sin datos, la
+ventana vacía, el atraso de la fuente (3 días hábiles) y las ventanas que
+reventaron. El check-in del monitor `ingesta-diaria-sniim` avisa además si el
+job **no corrió**. Requiere el secret `SENTRY_DSN`; sin él, el paso del
+workflow queda en `continue-on-error` y no tumba la ingesta.
 
 Auth de Actions contra GCP: Workload Identity Federation, ya configurada en
 el proyecto (service account `ingesta-diaria`, pool y proveedor `github`,
@@ -43,6 +50,7 @@ En pie:
 | `scraper/spiders/daily.py` | Barrido diario: 49 mercados × 2 modos |
 | `transform/load.py` | Upsert de NDJSON a la capa cruda |
 | `transform/raw/prices_table.sql` | DDL de `crudo.precios` |
+| `transform/monitor.py` | Reporte de cobertura y alertas a Sentry |
 
 Proyecto Scrapy en `scrapy.cfg` + `scraper/settings.py`; workflow en
 `.github/workflows/daily.yml`. Falta el spider de backfill, `transform/
