@@ -14,7 +14,10 @@ bloqueo.
 El PRD marca la Fase 0 como "hecha" pero ningún artefacto había
 materializado — Fase 1 reconstruye eso desde cero antes de tocar BigQuery.
 Cerrados: ALD-5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21,
-22. Sigue ALD-23 (carga de NDJSON a la capa cruda), luego ALD-24 y ALD-30.
+22, 23. Sigue ALD-24 (GitHub Actions del job diario), luego ALD-30 y ALD-27.
+
+`crudo.precios` existe y está **vacía**: la primera carga real la hará el job
+diario o el backfill, no una corrida manual.
 
 En pie: `scraper/catalogs.py` (regenera `data/catalogs/`),
 `scraper/fixtures.py` (recaptura `tests/fixtures/sniim/`),
@@ -110,7 +113,8 @@ y `market_coverage_by_year.csv`.
 
 ```
 scraper/     Scrapy. Solo extracción y normalización sintáctica.
-transform/   SQL de BigQuery: canonical/ y metrics/.
+transform/   SQL de BigQuery: raw/, canonical/ y metrics/, más load.py
+             (upsert de NDJSON a la capa cruda; corre aparte del scraper).
 app/         Streamlit. Solo presentación e interacción.
 data/        Catálogos y mapeos canónicos versionados.
 tests/       Fixtures de HTML real y pruebas de parser/aritmética.

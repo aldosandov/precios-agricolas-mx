@@ -270,6 +270,34 @@ bq query --use_legacy_sql=false --project_id=precios-agricolas-mx \
 si el scraper empieza a emitir un campo que la tabla no declara, falla la
 prueba en vez de fallar la carga.
 
+## Carga a BigQuery
+
+```bash
+uv run python -m transform.load                  # todo lo que haya en out/raw
+uv run python -m transform.load --dry-run        # listar sin tocar BigQuery
+uv run python -m transform.load --table proyecto.dataset.tabla
+```
+
+Corre **aparte del scraper**: el spider deja archivos, esto los lee. Así la
+ingesta no depende de que la facturación esté lista ni de tener credenciales
+de GCP.
+
+La carga es un **upsert sobre `llave_fila`**, no un reemplazo de particiones.
+El PRD (§8.8) pide inserción o actualización sobre la llave natural, y hay una
+razón concreta: el barrido escribe un mercado a la vez, así que truncar el día
+para cargar el mercado 210 borraría los 48 que ya estaban. Además el SNIIM
+revisa precios pasados, y una recarga tiene que traer la corrección, no
+conservar la fila vieja.
+
+El camino es: cargar los archivos a una tabla de paso (que expira sola a las 6
+horas por si una corrida muere), hacer un `MERGE` y borrarla. El `MERGE` lleva
+el rango de fechas en el `ON` para que BigQuery lea solo las particiones que
+se están cargando y no las 19 años de histórico.
+
+Correr la misma carga dos veces no cambia el conteo de filas — verificado
+contra BigQuery real en `tests/test_load_raw_live.py`, que también comprueba
+que un precio revisado sobrescribe al anterior.
+
 ## Fixtures
 
 El parser se prueba contra HTML real guardado, nunca inventado. Las
