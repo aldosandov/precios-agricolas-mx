@@ -57,14 +57,22 @@ def test_the_user_agent_is_not_scrapys_default(settings):
     assert "Scrapy" not in settings.get("USER_AGENT")
 
 
-# --- the cache the backfill resumes from ---
+# --- the cache nobody resumes from ---
 
 
 def test_the_http_cache_is_configured_but_off_by_default(settings):
-    """The daily run must see today's prices, not yesterday's copy of them.
-    The backfill turns it on for itself (PRD §8.6)."""
+    """The daily run must see today's prices, not yesterday's copy of them,
+    and the backfill resumes from out/cobertura.sqlite instead: 9 600
+    multi-megabyte responses would be 20+ GB of cache on a laptop."""
     assert not settings.getbool("HTTPCACHE_ENABLED")
     assert settings.get("HTTPCACHE_DIR")
+
+
+def test_no_spider_turns_the_cache_on_for_itself():
+    """It was written down as the backfill's way to resume. It is not."""
+    from scraper.spiders import backfill
+
+    assert "HTTPCACHE_ENABLED" not in (backfill.BackfillSpider.custom_settings or {})
 
 
 def test_failed_responses_are_never_cached(settings):
@@ -75,7 +83,8 @@ def test_failed_responses_are_never_cached(settings):
 
 
 def test_the_cache_never_expires_on_its_own(settings):
-    """A backfill runs for hours; prices of 2009 do not change while it does."""
+    """Replaying a run is the only use left, and a stale entry beats asking the
+    source twice for the same window."""
     assert settings.getint("HTTPCACHE_EXPIRATION_SECS") == 0
 
 

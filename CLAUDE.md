@@ -21,9 +21,9 @@ GitHub: empujar a `main`, disparar el workflow (ALD-24) y confirmar que la
 alerta llega a Sentry con el DSN real (ALD-25).
 
 **Fase 2 en curso.** Cerrados ALD-53 (consola de progreso), ALD-26 (tabla de
-cobertura y reanudación) y ALD-54 (`errback`). Sigue ALD-30 (spider de
-backfill), ALD-55 (carga incremental y purga), ALD-56 (`docs/backfill.md`) y
-ALD-27 (la corrida). El backfill **se ejecuta a mano en la laptop**, en
+cobertura y reanudación), ALD-54 (`errback`) y ALD-30 (spider de backfill).
+Sigue ALD-55 (carga incremental y purga), ALD-56 (`docs/backfill.md`) y ALD-27
+(la corrida). El backfill **se ejecuta a mano en la laptop**, en
 sesiones de tiempo libre a lo largo de varios días: arrancar y parar es el
 modo normal de operación, no una falla.
 
@@ -56,6 +56,8 @@ En pie:
 | `scraper/spiders/daily.py` | Barrido diario: 43 mercados activos × 2 modos, ventana de 5 días |
 | `scraper/console.py` | Extensión de progreso para corridas largas (`rich`). Apagada por defecto |
 | `scraper/backfill_state.py` | Rejilla del backfill, checkpoint en SQLite y contabilidad de bloques |
+| `scraper/harvest.py` | Respuesta → filas y por qué una respuesta no sirve. Lo que comparten los dos spiders |
+| `scraper/spiders/backfill.py` | Backfill por bloques trimestrales, reanudable entre sesiones |
 | `transform/load.py` | Upsert de NDJSON a la capa cruda |
 | `transform/raw/prices_table.sql` | DDL de `crudo.precios` |
 | `transform/monitor.py` | Reporte de cobertura y alertas a Sentry |
@@ -186,6 +188,19 @@ precio, trimestre)**; el estado vive en `out/cobertura.sqlite`, no versionado.
   archivo es sobrevivir a la corrida que lo escribió.
 - `uv run python -m scraper.backfill_state` dice cuánto falta y qué falló, sin
   tocar el spider.
+
+Dos cosas que se midieron al cablear el spider (ALD-30) y que no son obvias:
+
+- **Scrapy drena `start()` entero.** No hay contrapresión útil: medido, 226
+  bloques abiertos mientras 4 terminaban. Sin tope, los 9 628 quedarían
+  `abierto` en el primer minuto y el estado dejaría de significar nada. El
+  spider espera con `await asyncio.sleep()` dentro de `start()` —eso sí le
+  devuelve el reactor— hasta que haya menos de `MAX_OPEN_BLOCKS` en vuelo.
+- **`PartitionWriter` tenía un techo de descriptores.** Un trimestre son ~90
+  fechas × 47 mercados × 2 modos = **8 460 archivos abiertos a la vez**, o sea
+  `EMFILE` en cualquier máquina con el 1024 de siempre. Ahora hay un tope LRU
+  de 512: la regla de "truncar la primera vez, anexar después" ya permitía
+  cerrar y reabrir, solo faltaba hacerlo.
 
 ## Restricciones no negociables
 

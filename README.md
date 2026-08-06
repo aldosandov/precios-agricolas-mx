@@ -161,6 +161,34 @@ interfaz y no un log—; el barrido diario corre sin ella, porque en Actions un
 log plano se lee mejor que una barra que nadie mira. Si la salida no es una
 terminal, degrada sola a una línea de estado cada 30 segundos.
 
+### Backfill histórico
+
+```bash
+uv run python -m scraper.spiders.backfill                  # seguir donde quedó
+uv run python -m scraper.spiders.backfill --limit 500      # una sesión acotada
+uv run python -m scraper.spiders.backfill --market 210 \
+    --desde 2011-07-01 --hasta 2011-09-30
+uv run python -m scraper.backfill_state                    # cuánto falta, qué falló
+```
+
+No corre en Actions: se ejecuta a mano, en sesiones de tiempo libre a lo largo
+de varios días. **Arrancar y parar es el modo normal de operación**, no una
+falla — `Ctrl-C` o un apagón dejan a lo sumo los bloques que estaban en vuelo,
+y la sesión siguiente los retoma sin volver a pedir nada de lo ya cubierto.
+
+La unidad de trabajo es (mercado, modo de precio, trimestre): **9 628 bloques**
+que salen del sondeo de profundidad histórica, nunca del calendario, así que no
+se gasta una sola petición en años que la fuente nunca tuvo. El estado vive en
+`out/cobertura.sqlite`, con un commit por bloque cerrado.
+
+Una sola ventana ilegible tiñe su trimestre entero y lo devuelve a la cola.
+Repetirlo solo cuesta peticiones, porque la carga es idempotente; registrar como
+cubierto un trimestre del que faltó un pedazo sería el único fallo sin rastro.
+
+La caché HTTP se queda apagada. Se había puesto para que el backfill reanudara
+sin volver a descargar; eso lo hace ahora la tabla de cobertura con unos cientos
+de KB, contra los 20+ GB que costaría cachear 9 600 respuestas de megabytes.
+
 ### Carga a BigQuery
 
 ```bash
@@ -229,7 +257,7 @@ mano una sola vez.
 ```
 scraper/     Scrapy. Solo extracción y normalización sintáctica
 ├── parsers/   lectura del HTML, aislada y probada con fixtures
-├── spiders/   barrido diario (el de backfill viene en la fase 2)
+├── spiders/   barrido diario y backfill histórico
 └── pipelines/ salida a NDJSON particionado
 transform/   SQL de BigQuery y carga a la capa cruda
 app/         Streamlit (pendiente)

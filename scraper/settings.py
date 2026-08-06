@@ -6,9 +6,12 @@ the crawl is deliberately slow and identifiable: two requests at a time, three
 seconds apart, autothrottle widening the gap whenever the server takes longer,
 and a user agent that says who is asking and where to complain.
 
-The HTTP cache exists for the backfill, which runs for hours and has to resume
-without downloading again. It is off here on purpose: the daily run has to see
-today's prices, not a copy of yesterday's.
+The HTTP cache is off, and stays off in both spiders. It was put in for the
+backfill, to resume without downloading again; the coverage table of ALD-26
+does that for a few hundred KB, where caching 9 600 multi-megabyte responses
+would cost 20+ GB on the laptop that runs it. What is left of the cache is a
+convenience for repeating one run by hand (`--cache`), which is why the daily
+sweep must not have it on: it has to see today's prices, not a copy.
 """
 
 BOT_NAME = "precios-agricolas-mx"
@@ -79,13 +82,14 @@ RETRY_HTTP_CODES = [500, 502, 503, 504, 408, 429]
 # Responses of a whole quarter for one market run into megabytes.
 DOWNLOAD_TIMEOUT = 180
 
-# The cache is for the backfill: hours of requests that must not be repeated
-# after a crash. The backfill spider turns it on for itself; leaving it on here
-# would make the daily run replay yesterday's copy of today's prices.
+# Off, and not turned on by either spider. Resuming the backfill is what
+# `out/cobertura.sqlite` is for; this is only for replaying one run by hand
+# without asking the source again (`--cache`), and leaving it on would make the
+# daily run serve yesterday's copy of today's prices.
 HTTPCACHE_ENABLED = False
 HTTPCACHE_DIR = "httpcache"
-# Prices of 2009 do not change while a backfill runs, and a stale entry is
-# better than asking the source twice for the same window.
+# Prices of a window already fetched do not change while it is being replayed,
+# and a stale entry is better than asking the source twice for the same window.
 HTTPCACHE_EXPIRATION_SECS = 0
 # Never cache a failure: a stored 503 would replay as a lost window on every
 # resume, which is the one way this cache could lose data.

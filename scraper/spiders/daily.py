@@ -23,24 +23,15 @@ from __future__ import annotations
 
 import argparse
 import sys
-from datetime import UTC, date, datetime, timedelta
+from datetime import date, timedelta
 
 import scrapy
 
-from scraper.contract import ContractBreach, QueryContext, build_records
 from scraper.coverage import active_markets
-from scraper.parsers.results import EMPTY_MARKER, ParseError, parse_results
-from scraper.pipelines.ndjson import RAW_DIR, UnwritableRow, to_raw_rows
-from scraper.query import (
-    ALL,
-    DateWindow,
-    NoPaginator,
-    QueryRejected,
-    WindowExhausted,
-    build_url,
-    next_windows,
-    source_date,
-)
+from scraper.harvest import UNREADABLE, lost_request, rows_from
+from scraper.parsers.results import EMPTY_MARKER
+from scraper.pipelines.ndjson import RAW_DIR
+from scraper.query import ALL, DateWindow, build_url, next_windows, source_date
 
 # Several days back: the source sometimes publishes late, and reprocessing a
 # day is free because the load is idempotent (PRD §8.9). Five covers the
@@ -52,14 +43,6 @@ DEFAULT_DAYS = 5
 FAILURES_PATH = RAW_DIR.parent / "failures.txt"
 
 PRICE_MODES = ("1", "2")
-
-# Everything that means "this response is not usable" and is worth losing one
-# market over, but not the whole day.
-UNREADABLE = (ParseError, ContractBreach, UnwritableRow, QueryRejected, NoPaginator)
-
-
-class LostRequest(Exception):
-    """A request that never produced a response, after every retry allowed."""
 
 
 class DailySpider(scrapy.Spider):
@@ -121,25 +104,15 @@ class DailySpider(scrapy.Spider):
     def errback(self, failure):
         """A request that never came back is a lost window, not an empty one.
 
-        Scrapy gives up after `RETRY_TIMES`, bumps `retry/max_reached` and
-        moves on. Nothing else notices: the window is not in `failures`, not in
-        the file the monitor reads, and not in the alert. The sweep ends green
-        having quietly skipped a market, which is exactly the shape of failure
-        this ingest is built to make impossible.
+        The sweep would otherwise end green having quietly skipped a market,
+        which is exactly the shape of failure this ingest is built to prevent.
         """
-        request = failure.request
-        # HttpError carries the response it refused; a transport error does not.
-        response = getattr(failure.value, "response", None)
-        detail = f"HTTP {response.status}" if response is not None else repr(failure.value)
-        # Not RETRY_TIMES: robots.txt and a few others are never retried, and
-        # claiming four attempts for a single one would send the next reader
-        # looking at the wrong thing.
-        attempts = request.meta.get("retry_times", 0) + 1
+        kwargs = failure.request.cb_kwargs
         self._record(
-            request.cb_kwargs["destination_id"],
-            request.cb_kwargs["prices_per_id"],
-            request.cb_kwargs["window"],
-            LostRequest(f"{detail} tras {attempts} intento(s)"),
+            kwargs["destination_id"],
+            kwargs["prices_per_id"],
+            kwargs["window"],
+            lost_request(failure),
         )
 
     def parse(
@@ -157,11 +130,6 @@ class DailySpider(scrapy.Spider):
 
         try:
             splits = next_windows(window, response.text)
-        except WindowExhausted as error:
-            # A single day still overflows. Nothing left to split, and writing
-            # a truncated page would look like a complete one.
-            self._record(destination_id, prices_per_id, window, error)
-            return
         except UNREADABLE as error:
             self._record(destination_id, prices_per_id, window, error)
             return
@@ -172,22 +140,14 @@ class DailySpider(scrapy.Spider):
             return
 
         try:
-            yield from self._rows(response, destination_id, prices_per_id, window)
+            yield from rows_from(
+                response,
+                destination_id=destination_id,
+                prices_per_id=prices_per_id,
+                window=window,
+            )
         except UNREADABLE as error:
             self._record(destination_id, prices_per_id, window, error)
-
-    def _rows(self, response, destination_id: str, prices_per_id: str, window: DateWindow):
-        context = QueryContext(
-            product_id=ALL,
-            origin_id=ALL,
-            destination_id=destination_id,
-            prices_per_id=prices_per_id,
-            window=window,
-            source_url=response.url,
-            fetched_at=datetime.now(UTC),
-        )
-        table = parse_results(response.text)
-        yield from to_raw_rows(build_records(table, context))
 
     def _record(
         self,

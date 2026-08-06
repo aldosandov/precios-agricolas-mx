@@ -155,6 +155,13 @@ def _partition_name(row: dict) -> str:
     return f"destino={destination}_precio={row['tipo_precio']}.ndjson"
 
 
+# How many partitions may be open at once. A backfill quarter spans ~90 dates
+# across 47 markets and two price modes: 8 460 files, which is EMFILE on any
+# machine with the usual 1024 descriptors. Reopening a partition costs one
+# open() and the writes go to the same place, so the cap is free.
+MAX_OPEN_PARTITIONS = 512
+
+
 class PartitionWriter:
     """Write rows as they arrive, one file per date, market and price mode.
 
@@ -162,22 +169,43 @@ class PartitionWriter:
     of them, so nothing is buffered. Each partition is truncated the first
     time this run touches it and appended to afterwards: a rerun replaces the
     day instead of doubling it, without holding it in memory to find out.
+
+    That first-touch rule is also what lets a partition be closed and reopened
+    mid-run, which is what keeps a quarter of the backfill from asking the
+    kernel for thousands of descriptors at once.
     """
 
-    def __init__(self, out_dir: Path = RAW_DIR):
+    def __init__(self, out_dir: Path = RAW_DIR, max_open: int = MAX_OPEN_PARTITIONS):
         self.out_dir = out_dir
         self.paths: list[Path] = []
+        self.max_open = max_open
+        # Insertion-ordered and moved on use, so the one evicted is the one
+        # written to longest ago.
         self._open: dict[Path, object] = {}
+        self._touched: set[Path] = set()
 
     def write(self, row: dict) -> Path:
         path = self.out_dir / f"fecha={row['fecha']}" / _partition_name(row)
         handle = self._open.get(path)
         if handle is None:
-            path.parent.mkdir(parents=True, exist_ok=True)
-            handle = self._open[path] = path.open("w", encoding="utf-8")
-            self.paths.append(path)
+            handle = self._reopen(path)
+        else:
+            self._open[path] = self._open.pop(path)
         handle.write(json.dumps(row, ensure_ascii=False) + "\n")
         return path
+
+    def _reopen(self, path: Path):
+        while len(self._open) >= self.max_open:
+            self._open.pop(next(iter(self._open))).close()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        # Truncate the first time this run touches the partition, append after:
+        # the rerun still replaces the day instead of doubling it.
+        first = path not in self._touched
+        handle = self._open[path] = path.open("w" if first else "a", encoding="utf-8")
+        if first:
+            self._touched.add(path)
+            self.paths.append(path)
+        return handle
 
     def close(self) -> list[Path]:
         for handle in self._open.values():

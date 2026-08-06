@@ -329,6 +329,10 @@ class BlockLedger:
     def in_flight(self, block: Block) -> int:
         return self._flight.get(block, 0)
 
+    def open_blocks(self) -> int:
+        """How many blocks are still waiting on at least one request."""
+        return len(self._flight)
+
     def _settle(self, block: Block) -> bool:
         self._flight[block] = self._flight.get(block, 1) - 1
         if self._flight[block] > 0:
