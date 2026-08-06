@@ -122,7 +122,7 @@ uv run pytest    # la suite; parte pega al SNIIM en vivo
 ### Ingesta diaria
 
 ```bash
-uv run python -m scraper.spiders.daily                # 49 mercados, 7 días atrás
+uv run python -m scraper.spiders.daily                # 43 mercados, 5 días atrás
 uv run python -m scraper.spiders.daily --days 1 --market 210
 ```
 
@@ -130,6 +130,17 @@ Recorre los mercados con producto y origen en "todos", y pide cada uno dos
 veces —una por tipo de precio— porque el SNIIM publica el precio por
 presentación comercial y por kilogramo calculado, y la respuesta no dice cuál
 de los dos contestó. Deja los archivos en `out/raw/fecha=YYYY-MM-DD/`.
+
+Son 43 mercados y no los 49 del catálogo: seis llevan años sin publicar y
+pedirles todos los días gastaría un décimo del barrido en filas que no
+existen. La contrapartida es que un mercado que reviva quedaría invisible,
+así que conviene volver a correr `scraper.coverage` cada tanto.
+
+La ventana llega cinco días hacia atrás porque el fin de semana se come dos:
+desde un lunes alcanza el jueves anterior, que es el margen para recuperar lo
+que la fuente publique tarde. Ampliarla no cuesta peticiones —son 86 sea cual
+sea la ventana— solo respuestas más grandes: medido, 5 MB por corrida con un
+día y 25 MB con siete.
 
 Un mercado que falle no le cuesta el día a los otros 48: se anota, el barrido
 sigue y el proceso termina en rojo.

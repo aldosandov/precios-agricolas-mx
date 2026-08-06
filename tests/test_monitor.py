@@ -14,10 +14,10 @@ from datetime import date
 
 import pytest
 
+from scraper.coverage import active_markets
 from transform.monitor import (
     STALE_AFTER_BUSINESS_DAYS,
     RunReport,
-    active_markets,
     business_days_between,
     evaluate,
 )

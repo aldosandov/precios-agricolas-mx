@@ -28,7 +28,7 @@ from datetime import UTC, date, datetime, timedelta
 import scrapy
 
 from scraper.contract import ContractBreach, QueryContext, build_records
-from scraper.coverage import read_destinations
+from scraper.coverage import active_markets
 from scraper.parsers.results import EMPTY_MARKER, ParseError, parse_results
 from scraper.pipelines.ndjson import RAW_DIR, UnwritableRow, to_raw_rows
 from scraper.query import (
@@ -43,8 +43,9 @@ from scraper.query import (
 )
 
 # Several days back: the source sometimes publishes late, and reprocessing a
-# day is free because the load is idempotent (PRD §8.9).
-DEFAULT_DAYS = 7
+# day is free because the load is idempotent (PRD §8.9). Five covers the
+# previous Thursday from a Monday, since the weekend eats two days of window.
+DEFAULT_DAYS = 5
 
 # Where the sweep leaves the windows it could not read, for the monitoring step
 # to report them one by one instead of as a count.
@@ -74,9 +75,9 @@ class DailySpider(scrapy.Spider):
             raise ValueError(f"days must be positive, got {span}")
         last_day = end or source_date()
         self.window = DateWindow(last_day - timedelta(days=span - 1), last_day)
-        self.destination_ids = destinations or [
-            dest.destination_id for dest in read_destinations()
-        ]
+        # Only the markets the coverage scan found alive: the other six have
+        # not published in years and cost a tenth of the sweep's requests.
+        self.destination_ids = list(destinations or active_markets())
         self.failures: list[str] = []
 
     def plan_requests(self) -> list[scrapy.Request]:
