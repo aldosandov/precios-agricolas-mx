@@ -18,8 +18,14 @@ punta a punta.
 
 Cerrados: ALD-5 a ALD-25 (todos). Quedan dos verificaciones que dependen de
 GitHub: empujar a `main`, disparar el workflow (ALD-24) y confirmar que la
-alerta llega a Sentry con el DSN real (ALD-25). Sigue ALD-30 (spider de
-backfill) y ALD-27 (backfill histórico).
+alerta llega a Sentry con el DSN real (ALD-25).
+
+**Fase 2 en curso.** Cerrados ALD-53 (consola de progreso) y ALD-26 (tabla de
+cobertura y reanudación). Sigue ALD-54 (`errback`), ALD-30 (spider de
+backfill), ALD-55 (carga incremental y purga), ALD-56 (`docs/backfill.md`) y
+ALD-27 (la corrida). El backfill **se ejecuta a mano en la laptop**, en
+sesiones de tiempo libre a lo largo de varios días: arrancar y parar es el
+modo normal de operación, no una falla.
 
 Observabilidad: `transform/monitor.py` consulta BigQuery después de cada
 corrida y manda a Sentry el resumen, los mercados activos sin datos, la
@@ -49,6 +55,7 @@ En pie:
 | `scraper/pipelines/ndjson.py` | Fila §10, banderas de calidad, NDJSON por fecha |
 | `scraper/spiders/daily.py` | Barrido diario: 43 mercados activos × 2 modos, ventana de 5 días |
 | `scraper/console.py` | Extensión de progreso para corridas largas (`rich`). Apagada por defecto |
+| `scraper/backfill_state.py` | Rejilla del backfill, checkpoint en SQLite y contabilidad de bloques |
 | `transform/load.py` | Upsert de NDJSON a la capa cruda |
 | `transform/raw/prices_table.sql` | DDL de `crudo.precios` |
 | `transform/monitor.py` | Reporte de cobertura y alertas a Sentry |
@@ -146,6 +153,32 @@ y `market_coverage_by_year.csv`.
   2025). Estar en el catálogo no implica tener datos.
 - Dos mercados tienen huecos internos (Villahermosa 1999–2001, Zacatecas
   2003): una ventana vacía no siempre es un fallo de ingesta.
+
+## Rejilla y checkpoint del backfill (ALD-26)
+
+`scraper/backfill_state.py`. La unidad de trabajo es **(mercado, modo de
+precio, trimestre)**; el estado vive en `out/cobertura.sqlite`, no versionado.
+
+- La rejilla sale de `market_coverage_by_year.csv`, **nunca del calendario**:
+  solo años con datos. Eso deja fuera los dos mercados muertos, los quince que
+  arrancan tarde y los huecos internos. Son **9 628 bloques**, no 9 712: el
+  trimestre en curso se recorta a hoy y el resto del año no se pide.
+- **Solo `hecho` saca un bloque de la cola.** Un bloque `abierto` (sesión
+  interrumpida) y uno `fallido` vuelven igual. Y "cubierto" significa cubierto
+  *hasta la misma fecha*: el trimestre en curso crece un día a la vez, así que
+  un bloque cerrado ayer deja de cuadrar con la rejilla y regresa solo, sin
+  caso especial para "hoy".
+- El trimestre es la unidad atómica pero son muchas peticiones, porque la
+  ventana se subdivide en vuelo. `BlockLedger` lleva las peticiones en vuelo
+  por bloque y cierra al llegar a cero. **Una sola ventana ilegible tiñe el
+  trimestre entero de `fallido`** y se reintenta completo: registrar como
+  cubierto un trimestre del que faltó un pedazo es el único fallo que no deja
+  rastro.
+- `synchronous=FULL` en WAL, un commit por bloque. Un fsync por bloque contra
+  una petición al SNIIM cada segundo y medio no se nota, y el valor entero del
+  archivo es sobrevivir a la corrida que lo escribió.
+- `uv run python -m scraper.backfill_state` dice cuánto falta y qué falló, sin
+  tocar el spider.
 
 ## Restricciones no negociables
 
