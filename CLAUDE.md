@@ -13,8 +13,8 @@ bloqueo.
 
 El PRD marca la Fase 0 como "hecha" pero ningún artefacto había
 materializado — Fase 1 reconstruye eso desde cero antes de tocar BigQuery.
-Cerrados: ALD-5, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20. Sigue
-ALD-21 (primera corrida real contra un mercado), luego ALD-30 y ALD-23.
+Cerrados: ALD-5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21,
+22. Sigue ALD-23 (carga de NDJSON a la capa cruda), luego ALD-24 y ALD-30.
 
 En pie: `scraper/catalogs.py` (regenera `data/catalogs/`),
 `scraper/fixtures.py` (recaptura `tests/fixtures/sniim/`),
@@ -121,6 +121,11 @@ BigQuery en tres capas: **cruda** (inmutable) → **intermedia** (tipada,
 banderas de calidad) → **final** (lo único que lee la app). Partición por
 fecha (día), clustering por producto/mercado. Carga por archivo (`bq load`),
 nunca streaming.
+
+Proyecto GCP `precios-agricolas-mx`, facturación activa, **ubicación US**
+(no se puede cambiar sin recrear). Datasets y tablas en español, como el
+modelo de datos del PRD: `crudo.precios` ya existe (DDL en
+`transform/raw/prices_table.sql`); faltan `intermedio` y `final`.
 
 ## Stack
 

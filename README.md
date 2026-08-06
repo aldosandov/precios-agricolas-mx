@@ -235,6 +235,41 @@ la ingesta aquí es una fecha ilegible, porque sin fecha no hay partición.
 
 `out/` no se versiona.
 
+## Capa cruda en BigQuery
+
+DDL versionado en [`transform/raw/prices_table.sql`](transform/raw/prices_table.sql).
+Proyecto `precios-agricolas-mx`, dataset `crudo`, ubicación **US**
+(multirregión, donde aplica la capa gratuita y donde corre la app).
+
+```sql
+`precios-agricolas-mx.crudo.precios`
+PARTITION BY fecha
+CLUSTER BY producto_raw, destino_id, tipo_precio
+```
+
+Partición **por día**, no por mes: el job incremental escribe un día a la vez
+y las auditorías de cobertura razonan por día. El clustering sigue lo que se
+consulta junto — producto y mercado (§9.2).
+
+Los tipos no son cosméticos: `fecha` es `DATE` porque de ahí sale la
+partición, y los precios son `NUMERIC` porque el dinero en punto flotante
+deriva al agregarse. Solo van `NOT NULL` los campos que el contrato de la
+ingesta garantiza; las etiquetas que la consulta borra de la tabla
+(`producto_raw`, `origen_raw`…) quedan nulas si algún día se fija otro
+criterio.
+
+Aplicar desde cero:
+
+```bash
+bq --location=US mk --dataset precios-agricolas-mx:crudo
+bq query --use_legacy_sql=false --project_id=precios-agricolas-mx \
+  < transform/raw/prices_table.sql
+```
+
+`tests/test_raw_table_ddl.py` compara el DDL contra `RAW_SCHEMA` del pipeline:
+si el scraper empieza a emitir un campo que la tabla no declara, falla la
+prueba en vez de fallar la carga.
+
 ## Fixtures
 
 El parser se prueba contra HTML real guardado, nunca inventado. Las
