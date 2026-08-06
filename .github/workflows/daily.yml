@@ -1,0 +1,107 @@
+# Ingesta diaria: barrido del SNIIM y carga a la capa cruda de BigQuery.
+#
+# Un job de una tarea al día no justifica un orquestador con base de datos,
+# planificador y trabajadores (PRD §8.9). Los reintentos que importan ya viven
+# en Scrapy, que reintenta los 503 de la fuente cuatro veces con autothrottle.
+#
+# El backfill histórico NO corre aquí: se ejecuta a mano una sola vez.
+
+name: Ingesta diaria
+
+on:
+  schedule:
+    # 23:00 UTC = 17:00 en el centro de México, con el día hábil ya publicado.
+    # GitHub usa UTC; México no cambia de horario desde 2022, así que no se
+    # mueve con la estación.
+    - cron: "0 23 * * 1-5"
+  workflow_dispatch:
+    inputs:
+      days:
+        description: "Días hacia atrás que cubre la ventana"
+        default: "7"
+      market:
+        description: "Id de un mercado; vacío = los 49"
+        default: ""
+
+permissions:
+  contents: read
+  # Necesario para que GitHub emita el token OIDC que GCP intercambia por
+  # credenciales. Sin esto no hay federación y habría que guardar una llave.
+  id-token: write
+
+# Dos barridos a la vez escribirían las mismas particiones al mismo tiempo.
+concurrency:
+  group: ingesta-diaria
+  cancel-in-progress: false
+
+jobs:
+  ingesta:
+    runs-on: ubuntu-latest
+    # El barrido son 98 peticiones con 3 segundos de espera mínima; si tarda
+    # más de una hora es que algo se atoró.
+    timeout-minutes: 60
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Instalar uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Instalar dependencias
+        run: uv sync --frozen
+
+      - name: Autenticar contra Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: projects/994002984082/locations/global/workloadIdentityPools/github/providers/github
+          service_account: ingesta-diaria@precios-agricolas-mx.iam.gserviceaccount.com
+
+      - name: Barrer el SNIIM
+        id: barrido
+        # Sale distinto de cero si algún mercado falló. Lo que capturaron los
+        # demás sí tiene que llegar a BigQuery, así que el fallo se arrastra
+        # hasta el final en vez de cortar aquí.
+        continue-on-error: true
+        run: |
+          uv run python -m scraper.spiders.daily \
+            --days "${{ inputs.days || '7' }}" \
+            ${{ inputs.market && format('--market {0}', inputs.market) || '' }}
+
+      - name: Cargar a la capa cruda
+        # Una ventana sin precios no es un fallo: hay días festivos y mercados
+        # que no reportan. Que no haya datos nuevos lo vigila la alerta de
+        # ALD-25, no el código de salida de este paso.
+        if: hashFiles('out/raw/**/*.ndjson') != ''
+        run: uv run python -m transform.load --dir out/raw
+
+      - name: Guardar el NDJSON de la corrida
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ndjson-${{ github.run_id }}
+          path: out/raw
+          retention-days: 7
+          if-no-files-found: warn
+
+      - name: Reportar cobertura a Sentry
+        # Corre siempre: la corrida que más hay que reportar es justo la que
+        # falló. Y no tumba el job — un fallo del monitoreo no puede valer más
+        # que la ingesta que vigila.
+        if: always()
+        continue-on-error: true
+        env:
+          SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
+        run: |
+          uv run python -m transform.monitor \
+            --days "${{ inputs.days || '7' }}" \
+            --outcome ${{ steps.barrido.outcome == 'success' && 'ok' || 'error' }}
+
+      - name: Fallar si algún mercado se cayó
+        # Un encabezado nuevo o un rechazo tienen que verse en rojo: si no, el
+        # cambio se repite durante días detrás de una palomita verde.
+        if: steps.barrido.outcome == 'failure'
+        run: |
+          echo "::error::El barrido reportó ventanas fallidas; revisar el log del paso 'Barrer el SNIIM'"
+          exit 1

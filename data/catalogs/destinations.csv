@@ -1,0 +1,50 @@
+destination_id,label,state,market
+10,Aguascalientes: Centro Comercial Agropecuario de Aguascalientes,Aguascalientes,Centro Comercial Agropecuario de Aguascalientes
+20,Baja California Sur: Unión de Comerciantes de La Paz,Baja California Sur,Unión de Comerciantes de La Paz
+33,"Baja California : Central de Abasto INDIA, Tijuana",Baja California,"Central de Abasto INDIA, Tijuana"
+40,"Campeche: Mercado ""Pedro Sáinz de Baranda"", Campeche",Campeche,"Mercado ""Pedro Sáinz de Baranda"", Campeche"
+50,"Coahuila: Central de Abasto de La Laguna, Torreón",Coahuila,"Central de Abasto de La Laguna, Torreón"
+61,Chihuahua: Central de Abasto de Chihuahua,Chihuahua,Central de Abasto de Chihuahua
+63,Chihuahua: Mercado de Abasto de Cd. Juárez,Chihuahua,Mercado de Abasto de Cd. Juárez
+70,Chiapas: Central de Abasto de Tuxtla Gutiérrez,Chiapas,Central de Abasto de Tuxtla Gutiérrez
+71,Chiapas: Tapachula,Chiapas,Tapachula
+80,Colima: Centros de distribución de Colima,Colima,Centros de distribución de Colima
+100,DF: Central de Abasto de Iztapalapa DF,Distrito Federal,Central de Abasto de Iztapalapa DF
+101,Durango: Centro de Distribución y Abasto de Gómez Palacio,Durango,Centro de Distribución y Abasto de Gómez Palacio
+102,"Durango: Central de Abasto ""Francisco Villa""",Durango,"Central de Abasto ""Francisco Villa"""
+110,Guanajuato: Central de Abasto de León,Guanajuato,Central de Abasto de León
+111,Guanajuato: Módulo de Abasto Irapuato,Guanajuato,Módulo de Abasto Irapuato
+112,"Guanajuato: Mercado de Abasto de Celaya (""Benito Juárez"")",Guanajuato,"Mercado de Abasto de Celaya (""Benito Juárez"")"
+121,Guerrero: Central de Abastos de Acapulco,Guerrero,Central de Abastos de Acapulco
+122,Guerrero: Chilpancingo de los Bravo,Guerrero,Chilpancingo de los Bravo
+130,Hidalgo: Central de Abasto de Pachuca,Hidalgo,Central de Abasto de Pachuca
+140,Jalisco: Mercado de Abasto de Guadalajara,Jalisco,Mercado de Abasto de Guadalajara
+141,Jalisco: Mercado Felipe Ángeles de Guadalajara,Jalisco,Mercado Felipe Ángeles de Guadalajara
+150,México: Central de Abasto de Toluca,México,Central de Abasto de Toluca
+151,México: Central de Abasto de Ecatepec,México,Central de Abasto de Ecatepec
+160,Michoacán: Mercado de Abasto de Morelia,Michoacán,Mercado de Abasto de Morelia
+170,Morelos: Central de Abasto de Cuautla,Morelos,Central de Abasto de Cuautla
+172,"Morelos: Mercado ""Adolfo López Mateos"" de Cuernavaca",Morelos,"Mercado ""Adolfo López Mateos"" de Cuernavaca"
+180,Nayarit: Mercado de abasto 'Adolfo López Mateos' de Tepic,Nayarit,Mercado de abasto 'Adolfo López Mateos' de Tepic
+181,Nayarit: Nayarabastos de Tepic,Nayarit,Nayarabastos de Tepic
+190,"Nuevo León: Mercado de Abasto ""Estrella"" de San Nicolás de los Garza",Nuevo León,"Mercado de Abasto ""Estrella"" de San Nicolás de los Garza"
+200,Oaxaca: Módulo de Abasto de Oaxaca,Oaxaca,Módulo de Abasto de Oaxaca
+210,Puebla: Central de Abasto de Puebla,Puebla,Central de Abasto de Puebla
+220,Querétaro: Mercado de Abasto de Querétaro,Querétaro,Mercado de Abasto de Querétaro
+230,"Quintana Roo: Mercado de Chetumal, Quintana Roo",Quintana Roo,"Mercado de Chetumal, Quintana Roo"
+231,Quintana Roo: Módulo de Abasto Cancún,Quintana Roo,Módulo de Abasto Cancún
+240,San Luis Potosí: Centro de Abasto de San Luis Potosí,San Luis Potosí,Centro de Abasto de San Luis Potosí
+250,Sinaloa: Central de Abasto de Culiacán,Sinaloa,Central de Abasto de Culiacán
+252,Sinaloa: Zona de Abasto de Mazatlán,Sinaloa,Zona de Abasto de Mazatlán
+260,"Sonora: Mercado de Abasto ""Francisco I. Madero"" de Hermosillo",Sonora,"Mercado de Abasto ""Francisco I. Madero"" de Hermosillo"
+261,Sonora: Central de Abasto de Cd. Obregón,Sonora,Central de Abasto de Cd. Obregón
+270,Tabasco: Central de Abasto de Villahermosa,Tabasco,Central de Abasto de Villahermosa
+280,"Tamaulipas: Módulo de Abasto de Tampico, Madero y Altamira",Tamaulipas,"Módulo de Abasto de Tampico, Madero y Altamira"
+281,Tamaulipas: Módulo de Abasto de Reynosa,Tamaulipas,Módulo de Abasto de Reynosa
+301,Veracruz: Central de Abasto de Jalapa,Veracruz,Central de Abasto de Jalapa
+302,Veracruz: Central de Abasto de Minatitlán,Veracruz,Central de Abasto de Minatitlán
+306,Veracruz: Mercado Malibrán,Veracruz,Mercado Malibrán
+310,Yucatán: Central de Abasto de Mérida,Yucatán,Central de Abasto de Mérida
+311,Yucatán: Centro Mayorista Oxkutzcab,Yucatán,Centro Mayorista Oxkutzcab
+312,"Yucatán: Mercado ""Casa del Pueblo""",Yucatán,"Mercado ""Casa del Pueblo"""
+320,Zacatecas: Mercado de Abasto de Zacatecas,Zacatecas,Mercado de Abasto de Zacatecas
