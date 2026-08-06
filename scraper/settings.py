@@ -34,6 +34,20 @@ ITEM_PIPELINES = {
     "scraper.pipelines.ndjson.NdjsonPartitionPipeline": 100,
 }
 
+# The progress console, off unless a run asks for it. The backfill turns it on
+# because it runs for days on a laptop somebody is looking at; the daily sweep
+# leaves it off, because in GitHub Actions a plain log reads better than a bar
+# nobody watches. Turning it on without also setting LOG_FILE puts Scrapy's log
+# and the live area on the same terminal, and neither survives.
+EXTENSIONS = {
+    "scraper.console.ProgressConsole": 100,
+}
+PROGRESS_CONSOLE_ENABLED = False
+# Seconds between status lines when the output is not a terminal. A session
+# redirected to a file is read afterwards, so a line per second would bury the
+# failures among thousands of identical rows.
+PROGRESS_CONSOLE_INTERVAL = 30
+
 # Where the NDJSON partitions land. Not versioned.
 RAW_OUTPUT_DIR = "out/raw"
 

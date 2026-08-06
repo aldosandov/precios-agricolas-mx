@@ -48,6 +48,7 @@ En pie:
 | `scraper/contract.py` | Registro crudo, llave natural, rechazo |
 | `scraper/pipelines/ndjson.py` | Fila §10, banderas de calidad, NDJSON por fecha |
 | `scraper/spiders/daily.py` | Barrido diario: 43 mercados activos × 2 modos, ventana de 5 días |
+| `scraper/console.py` | Extensión de progreso para corridas largas (`rich`). Apagada por defecto |
 | `transform/load.py` | Upsert de NDJSON a la capa cruda |
 | `transform/raw/prices_table.sql` | DDL de `crudo.precios` |
 | `transform/monitor.py` | Reporte de cobertura y alertas a Sentry |
@@ -77,6 +78,16 @@ Actions.
 Ojo con Scrapy ≥2.13: el entry point es `async def start()`. Definir solo
 `start_requests()` no falla — el spider rastrea cero páginas y reporta
 `finished`.
+
+La consola de progreso (`scraper/console.py`, ALD-53) solo se enciende con
+`PROGRESS_CONSOLE_ENABLED`, y quien la enciende **tiene que fijar `LOG_FILE` en
+la misma corrida**: es lo único que le quita a Scrapy el handler de consola, y
+se lee cuando se configura el logging, así que no se puede fijar más tarde. Sin
+eso, el log y el área viva se pelean la terminal y no sobrevive ninguno. Lee
+dos miembros opcionales del spider —`failures: list[str]` y
+`progress() -> Snapshot`—; sin el segundo la barra no tiene total y solo cuenta
+respuestas. Los handlers de señales no declaran `spider` ni `item`: pydispatch
+solo pasa los argumentos que el receptor acepta.
 
 El registro crudo guarda cada criterio en dos planos: la etiqueta que dio la
 tabla y el id que se envió. La llave natural es

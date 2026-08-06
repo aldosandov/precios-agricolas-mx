@@ -194,11 +194,23 @@ def main(argv: list[str]) -> int:
         "volver a pedirle al SNIIM); apagada por defecto porque la corrida "
         "diaria tiene que ver los precios de hoy",
     )
+    parser.add_argument(
+        "--progress",
+        action="store_true",
+        help="barra de avance en vez del log; el log completo se va a "
+        "out/daily.log. Para mirar una corrida, no para Actions",
+    )
     args = parser.parse_args(argv)
 
     settings = get_project_settings()
     if args.cache:
         settings.set("HTTPCACHE_ENABLED", True)
+    if args.progress:
+        # The log has to leave the terminal before the console takes it over:
+        # LOG_FILE is what removes Scrapy's console handler, and it is read
+        # when logging is configured, so it cannot be set any later than this.
+        settings.set("LOG_FILE", str(RAW_DIR.parent / "daily.log"))
+        settings.set("PROGRESS_CONSOLE_ENABLED", True)
 
     process = CrawlerProcess(settings)
     crawler = process.create_crawler(DailySpider)

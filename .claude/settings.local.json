@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__linear-server__list_projects",
+      "mcp__notion__notion-search",
+      "mcp__notion__notion-fetch",
+      "mcp__linear-server__get_issue",
+      "Bash(uv --version)",
+      "Bash(uv lock *)"
+    ]
+  }
+}

@@ -11,6 +11,7 @@ dependencies = [
     "streamlit>=1.61",
     "plotly>=6.9",
     "sentry-sdk>=2.30",
+    "rich>=14.0",
 ]
 
 [dependency-groups]

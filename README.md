@@ -124,6 +124,7 @@ uv run pytest    # la suite; parte pega al SNIIM en vivo
 ```bash
 uv run python -m scraper.spiders.daily                # 43 mercados, 5 días atrás
 uv run python -m scraper.spiders.daily --days 1 --market 210
+uv run python -m scraper.spiders.daily --progress     # barra de avance
 ```
 
 Recorre los mercados con producto y origen en "todos", y pide cada uno dos
@@ -148,6 +149,13 @@ sigue y el proceso termina en rojo.
 La ventana se calcula con la fecha **del centro de México**, no la de la
 máquina que corre el barrido: en un runner en UTC, después de las 18:00 hora
 local ya es el día siguiente y se pediría un día que la fuente aún no publica.
+
+Con `--progress` el log completo se va a `out/daily.log` y la terminal queda
+para una barra de avance y una línea por ventana fallida. Existe para el
+backfill de la fase 2 —horas de corrida en una laptop, donde la consola es una
+interfaz y no un log—; el barrido diario corre sin ella, porque en Actions un
+log plano se lee mejor que una barra que nadie mira. Si la salida no es una
+terminal, degrada sola a una línea de estado cada 30 segundos.
 
 ### Carga a BigQuery
 
