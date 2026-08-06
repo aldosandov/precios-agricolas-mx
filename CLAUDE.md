@@ -13,8 +13,8 @@ bloqueo.
 
 El PRD marca la Fase 0 como "hecha" pero ningún artefacto había
 materializado — Fase 1 reconstruye eso desde cero antes de tocar BigQuery.
-Cerrados: ALD-5, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18. Sigue ALD-19
-(spider incremental diario), luego ALD-30 y ALD-23.
+Cerrados: ALD-5, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19. Sigue
+ALD-20 (autothrottle, caché HTTP, user agent), luego ALD-30 y ALD-23.
 
 En pie: `scraper/catalogs.py` (regenera `data/catalogs/`),
 `scraper/fixtures.py` (recaptura `tests/fixtures/sniim/`),
@@ -23,8 +23,14 @@ En pie: `scraper/catalogs.py` (regenera `data/catalogs/`),
 `scraper/parsers/results.py` (tabla → columnas y filas, por encabezado),
 `scraper/contract.py` (registro crudo, llave natural, rechazo),
 `scraper/pipelines/ndjson.py` (fila §10, banderas de calidad, NDJSON por
-fecha en `out/`, no versionado). Todavía vacíos `transform/`, `app/`,
-`scraper/spiders/`.
+fecha en `out/`, no versionado), `scraper/spiders/daily.py` (barrido diario,
+49 mercados × 2 modos, subdivisión y aislamiento por mercado). Proyecto
+Scrapy en `scrapy.cfg` + `scraper/settings.py`. Todavía vacíos `transform/`
+y `app/`; falta el spider de backfill.
+
+Ojo con Scrapy ≥2.13: el entry point es `async def start()`. Definir solo
+`start_requests()` no falla — el spider rastrea cero páginas y reporta
+`finished`.
 
 El registro crudo guarda cada criterio en dos planos: la etiqueta que dio la
 tabla y el id que se envió. La llave natural es

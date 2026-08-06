@@ -20,6 +20,7 @@ from scraper.fixtures import FIXTURES_DIR
 from scraper.parsers.results import parse_results
 from scraper.pipelines.ndjson import (
     RAW_SCHEMA,
+    PartitionWriter,
     to_raw_rows,
     write_partitions,
 )
@@ -183,6 +184,43 @@ def test_running_the_same_window_twice_does_not_duplicate_rows(tmp_path):
 
     assert len(first[0].read_text("utf-8").splitlines()) == sum(
         1 for row in to_raw_rows(_records()) if row["fecha"] == "2026-07-01"
+    )
+
+
+def test_the_writer_truncates_a_partition_once_and_appends_after_that(tmp_path):
+    """Scrapy hands rows over one at a time, but a rerun still has to replace
+    the day instead of doubling it."""
+    rows = to_raw_rows(_records())
+    same_day = [row for row in rows if row["fecha"] == "2026-07-01"]
+
+    for _ in range(2):
+        writer = PartitionWriter(tmp_path)
+        for row in same_day:
+            writer.write(row)
+        writer.close()
+
+    written = list((tmp_path / "fecha=2026-07-01").glob("*.ndjson"))
+    assert len(written) == 1
+    assert len(written[0].read_text("utf-8").splitlines()) == len(same_day)
+
+
+def test_the_writer_lands_the_same_files_as_the_batch_helper(tmp_path):
+    rows = to_raw_rows(_records())
+    batch = write_partitions(rows, tmp_path / "batch")
+
+    writer = PartitionWriter(tmp_path / "stream")
+    for row in rows:
+        writer.write(row)
+    writer.close()
+
+    streamed = sorted((tmp_path / "stream").rglob("*.ndjson"))
+    assert [path.relative_to(tmp_path / "stream") for path in streamed] == [
+        path.relative_to(tmp_path / "batch") for path in sorted(batch)
+    ]
+    assert all(
+        (tmp_path / "batch" / path.relative_to(tmp_path / "stream")).read_text("utf-8")
+        == path.read_text("utf-8")
+        for path in streamed
     )
 
 

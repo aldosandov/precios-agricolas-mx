@@ -1,0 +1,199 @@
+"""Daily incremental sweep: every market, both price modes, a few days back.
+
+The market is the pinned criterion (PRD §8.2): 49 requests per window instead
+of 222, and the table keeps product, quality, presentation and origin. Each
+market is asked twice, once per price mode, because mode 2 divides prices by
+the presentation weight and the response does not say which one it answered.
+
+The window reaches several days back on purpose. The source publishes late
+some days, and rerunning a day costs nothing: the partition is rewritten, not
+appended to (see scraper/pipelines/ndjson.py).
+
+One market must not cost the other 48 their day, so a response that cannot be
+read is recorded and the sweep goes on. The run still ends in red: a lost day
+is unrecoverable, but so is a schema change nobody notices.
+
+Usage:
+    uv run python -m scraper.spiders.daily              # last 7 days, 49 markets
+    uv run python -m scraper.spiders.daily --days 3
+    uv run python -m scraper.spiders.daily --market 210 --market 100
+"""
+
+from __future__ import annotations
+
+import argparse
+import sys
+from datetime import date, datetime, timedelta, timezone
+
+import scrapy
+
+from scraper.contract import ContractBreach, QueryContext, build_records
+from scraper.coverage import read_destinations
+from scraper.parsers.results import EMPTY_MARKER, ParseError, parse_results
+from scraper.pipelines.ndjson import UnwritableRow, to_raw_rows
+from scraper.query import (
+    ALL,
+    DateWindow,
+    NoPaginator,
+    QueryRejected,
+    WindowExhausted,
+    build_url,
+    next_windows,
+)
+
+# Several days back: the source sometimes publishes late, and reprocessing a
+# day is free because the load is idempotent (PRD §8.9).
+DEFAULT_DAYS = 7
+
+PRICE_MODES = ("1", "2")
+
+# Everything that means "this response is not usable" and is worth losing one
+# market over, but not the whole day.
+UNREADABLE = (ParseError, ContractBreach, UnwritableRow, QueryRejected, NoPaginator)
+
+
+class DailySpider(scrapy.Spider):
+    name = "daily"
+
+    def __init__(
+        self,
+        days: int | str = DEFAULT_DAYS,
+        destinations: list[str] | None = None,
+        end: date | None = None,
+        **kwargs,
+    ):
+        super().__init__(**kwargs)
+        # Scrapy passes -a arguments as strings.
+        span = int(days)
+        if span < 1:
+            raise ValueError(f"days must be positive, got {span}")
+        last_day = end or date.today()
+        self.window = DateWindow(last_day - timedelta(days=span - 1), last_day)
+        self.destination_ids = destinations or [
+            dest.destination_id for dest in read_destinations()
+        ]
+        self.failures: list[str] = []
+
+    def plan_requests(self) -> list[scrapy.Request]:
+        """Every market against both price modes, over the same window."""
+        return [
+            self._request(destination_id, prices_per_id, self.window)
+            for destination_id in self.destination_ids
+            for prices_per_id in PRICE_MODES
+        ]
+
+    async def start(self):
+        # Scrapy 2.13 replaced start_requests() with this; 2.17 stopped calling
+        # the old one at all, silently crawling nothing.
+        for request in self.plan_requests():
+            yield request
+
+    def _request(
+        self, destination_id: str, prices_per_id: str, window: DateWindow
+    ) -> scrapy.Request:
+        return scrapy.Request(
+            build_url(
+                ALL,
+                window,
+                destination_id=destination_id,
+                prices_per_id=prices_per_id,
+            ),
+            callback=self.parse,
+            cb_kwargs={
+                "destination_id": destination_id,
+                "prices_per_id": prices_per_id,
+                "window": window,
+            },
+            dont_filter=True,
+        )
+
+    def parse(
+        self,
+        response,
+        destination_id: str,
+        prices_per_id: str,
+        window: DateWindow,
+    ):
+        """Rows for a window that fits, halves for one that does not."""
+        if EMPTY_MARKER in response.text:
+            # A valid window with no prices: no rows and no paginator either.
+            # Common in the daily run, since markets do not report every day.
+            return
+
+        try:
+            splits = next_windows(window, response.text)
+        except WindowExhausted as error:
+            # A single day still overflows. Nothing left to split, and writing
+            # a truncated page would look like a complete one.
+            self._record(destination_id, prices_per_id, window, error)
+            return
+        except UNREADABLE as error:
+            self._record(destination_id, prices_per_id, window, error)
+            return
+
+        if splits:
+            for half in splits:
+                yield self._request(destination_id, prices_per_id, half)
+            return
+
+        try:
+            yield from self._rows(response, destination_id, prices_per_id, window)
+        except UNREADABLE as error:
+            self._record(destination_id, prices_per_id, window, error)
+
+    def _rows(self, response, destination_id: str, prices_per_id: str, window: DateWindow):
+        context = QueryContext(
+            product_id=ALL,
+            origin_id=ALL,
+            destination_id=destination_id,
+            prices_per_id=prices_per_id,
+            window=window,
+            source_url=response.url,
+            fetched_at=datetime.now(timezone.utc),
+        )
+        table = parse_results(response.text)
+        yield from to_raw_rows(build_records(table, context))
+
+    def _record(
+        self,
+        destination_id: str,
+        prices_per_id: str,
+        window: DateWindow,
+        error: Exception,
+    ) -> None:
+        failure = (
+            f"destino={destination_id} precio={prices_per_id} "
+            f"ventana={window.start:%Y-%m-%d}..{window.end:%Y-%m-%d}: "
+            f"{type(error).__name__}: {error}"
+        )
+        self.failures.append(failure)
+        self.logger.error(failure)
+        crawler = getattr(self, "crawler", None)
+        if crawler is not None:
+            crawler.stats.inc_value("ingest/failed_windows")
+
+
+def main(argv: list[str]) -> int:
+    """Run the sweep and report in the exit code, for GitHub Actions."""
+    from scrapy.crawler import CrawlerProcess
+    from scrapy.utils.project import get_project_settings
+
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--days", type=int, default=DEFAULT_DAYS)
+    parser.add_argument("--market", action="append", dest="markets")
+    args = parser.parse_args(argv)
+
+    process = CrawlerProcess(get_project_settings())
+    crawler = process.create_crawler(DailySpider)
+    process.crawl(crawler, days=args.days, destinations=args.markets)
+    process.start()
+
+    failures = crawler.stats.get_value("ingest/failed_windows", 0)
+    if failures:
+        print(f"{failures} ventana(s) fallaron; revisar el log", file=sys.stderr)
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main(sys.argv[1:]))

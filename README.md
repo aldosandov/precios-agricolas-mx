@@ -149,6 +149,32 @@ columna no es atribuible y detiene la ingesta.
 lo marca la capa intermedia, que nunca corrige. El contrato es sobre
 identidad, no sobre valores.
 
+## Ingesta diaria
+
+```bash
+uv run python -m scraper.spiders.daily                    # 49 mercados, 7 días atrás
+uv run python -m scraper.spiders.daily --days 3
+uv run python -m scraper.spiders.daily --market 210       # un solo mercado
+```
+
+Recorre los 49 mercados con producto y origen en `-1`, y pide cada uno **dos
+veces**, una por tipo de precio: con `PreciosPorId=2` los precios vienen
+divididos entre el peso de la presentación, y la respuesta no dice con cuál
+contestó.
+
+La ventana llega varios días hacia atrás a propósito. La fuente publica tarde
+algunos días y reprocesar no cuesta nada, porque la partición se reescribe.
+
+Si la respuesta viene truncada, la ventana se parte a la mitad y se vuelve a
+pedir — nunca se pagina. Si un solo día sigue desbordando ya no hay nada que
+partir: eso se registra como fallo, no se escribe media página.
+
+**Un mercado que falla no le cuesta el día a los otros 48.** Un encabezado
+desconocido, un rechazo o una fila incompleta detienen ese mercado, se anotan
+y el barrido sigue; al final el proceso sale con código distinto de cero para
+que Actions marque el job en rojo. Perder un día es irrecuperable, pero un
+cambio de esquema que nadie note también.
+
 ## Salida: NDJSON particionado por fecha
 
 `scraper/pipelines/ndjson.py` convierte los registros del contrato en la fila
@@ -212,12 +238,15 @@ construyen en los issues siguientes de Fase 1 (ver Linear, proyecto
 cada pieza:
 
 ```bash
-# scraper (pendiente)
-uv run scrapy crawl <spider> ...
+# ingesta diaria (49 mercados, dos tipos de precio)
+uv run python -m scraper.spiders.daily --days 7
 
 # tests
 uv run pytest
 ```
+
+El backfill histórico (ALD-30) y la carga a BigQuery (ALD-23) siguen
+pendientes.
 
 ## Dependencias
 

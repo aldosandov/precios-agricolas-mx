@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from collections import defaultdict
+import logging
 from datetime import datetime
 from pathlib import Path
 from typing import Iterable, Sequence
@@ -48,6 +48,8 @@ RAW_SCHEMA = (
     "url_consulta",
     "llave_fila",
 )
+
+logger = logging.getLogger(__name__)
 
 PRICE_MODES = {"1": "presentacion_comercial", "2": "kilogramo_calculado"}
 
@@ -151,19 +153,59 @@ def _partition_name(row: dict) -> str:
     return f"destino={destination}_precio={row['tipo_precio']}.ndjson"
 
 
-def write_partitions(rows: Sequence[dict], out_dir: Path = RAW_DIR) -> list[Path]:
-    """Write one file per date, market and price mode. Rewrites, never appends."""
-    grouped = defaultdict(list)
-    for row in rows:
-        grouped[(row["fecha"], _partition_name(row))].append(row)
+class PartitionWriter:
+    """Write rows as they arrive, one file per date, market and price mode.
 
-    written = []
-    for (day, name), partition in sorted(grouped.items()):
-        directory = out_dir / f"fecha={day}"
-        directory.mkdir(parents=True, exist_ok=True)
-        path = directory / name
-        with path.open("w", encoding="utf-8") as handle:
-            for row in partition:
-                handle.write(json.dumps(row, ensure_ascii=False) + "\n")
-        written.append(path)
-    return written
+    The spider hands rows over one at a time and a backfill produces millions
+    of them, so nothing is buffered. Each partition is truncated the first
+    time this run touches it and appended to afterwards: a rerun replaces the
+    day instead of doubling it, without holding it in memory to find out.
+    """
+
+    def __init__(self, out_dir: Path = RAW_DIR):
+        self.out_dir = out_dir
+        self.paths: list[Path] = []
+        self._open: dict[Path, object] = {}
+
+    def write(self, row: dict) -> Path:
+        path = self.out_dir / f"fecha={row['fecha']}" / _partition_name(row)
+        handle = self._open.get(path)
+        if handle is None:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            handle = self._open[path] = path.open("w", encoding="utf-8")
+            self.paths.append(path)
+        handle.write(json.dumps(row, ensure_ascii=False) + "\n")
+        return path
+
+    def close(self) -> list[Path]:
+        for handle in self._open.values():
+            handle.close()
+        self._open.clear()
+        return self.paths
+
+
+def write_partitions(rows: Sequence[dict], out_dir: Path = RAW_DIR) -> list[Path]:
+    """Write a batch at once. Same files a streaming run would leave behind."""
+    writer = PartitionWriter(out_dir)
+    for row in sorted(rows, key=lambda row: (row["fecha"], _partition_name(row))):
+        writer.write(row)
+    return writer.close()
+
+
+class NdjsonPartitionPipeline:
+    """Scrapy item pipeline: every row the spiders emit lands in its partition."""
+
+    def __init__(self, out_dir: Path = RAW_DIR):
+        self.writer = PartitionWriter(out_dir)
+
+    @classmethod
+    def from_crawler(cls, crawler):
+        return cls(Path(crawler.settings.get("RAW_OUTPUT_DIR", RAW_DIR)))
+
+    def process_item(self, item):
+        self.writer.write(item)
+        return item
+
+    def close_spider(self):
+        paths = self.writer.close()
+        logger.info(f"escritas {len(paths)} particiones en {self.writer.out_dir}")
