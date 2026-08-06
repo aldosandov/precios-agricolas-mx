@@ -11,16 +11,36 @@ in tests/test_load_raw_live.py.
 """
 
 from datetime import date
+from types import SimpleNamespace
 
 import pytest
 
 from scraper.pipelines.ndjson import RAW_SCHEMA
 from transform.load import (
     RAW_TABLE,
+    LoadReport,
     build_merge_sql,
+    count_rows,
+    load,
     partition_dates,
     partition_files,
+    purge,
 )
+
+
+def _partition(root, day: str, rows: int = 0, name: str = "destino=210_precio=k.ndjson"):
+    directory = root / f"fecha={day}"
+    directory.mkdir(exist_ok=True)
+    path = directory / name
+    path.write_text(f'{{"fecha": "{day}"}}\n' * rows, encoding="utf-8")
+    return path
+
+
+def _report(staged: int) -> LoadReport:
+    return LoadReport(
+        files=0, staged_rows=staged, affected_rows=staged, table=RAW_TABLE, dates=()
+    )
+
 
 # --- what gets loaded ---
 
@@ -92,3 +112,125 @@ def test_a_row_already_loaded_is_updated_and_not_inserted_again(merge_sql):
 
 def test_the_merge_targets_the_raw_table(merge_sql):
     assert f"MERGE `{RAW_TABLE}` T" in merge_sql
+
+
+# --- loading a slice of the disk, and clearing it (ALD-55) ---
+
+
+def test_a_date_range_selects_only_its_partitions(tmp_path):
+    """The backfill loads a quarter at a time so the MERGE prunes to that
+    quarter instead of scanning the history."""
+    for day in ("2011-06-30", "2011-07-01", "2011-09-30", "2011-10-01"):
+        _partition(tmp_path, day)
+
+    picked = partition_files(tmp_path, since=date(2011, 7, 1), until=date(2011, 9, 30))
+
+    assert partition_dates(picked) == [date(2011, 7, 1), date(2011, 9, 30)]
+
+
+def test_no_range_still_means_everything(tmp_path):
+    _partition(tmp_path, "2011-06-30")
+    _partition(tmp_path, "2011-10-01")
+
+    assert len(partition_files(tmp_path)) == 2
+
+
+def test_rows_are_counted_from_the_files_and_not_from_their_names(tmp_path):
+    paths = [_partition(tmp_path, "2011-07-01", rows=3), _partition(tmp_path, "2011-07-04", rows=5)]
+
+    assert count_rows(paths) == 8
+
+
+def test_purging_removes_the_partitions_and_their_empty_days(tmp_path):
+    """~10.7 GB of NDJSON for the whole history, on a personal laptop. What is
+    already in BigQuery does not stay here."""
+    paths = [_partition(tmp_path, "2011-07-01", rows=4), _partition(tmp_path, "2011-07-04", rows=6)]
+
+    assert purge(paths, _report(10)) == 2
+    assert not any(path.exists() for path in paths)
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_a_day_that_still_holds_something_else_is_not_removed(tmp_path):
+    loaded = _partition(tmp_path, "2011-07-01", rows=2)
+    other = _partition(tmp_path, "2011-07-01", rows=1, name="destino=100_precio=k.ndjson")
+
+    purge([loaded], _report(2))
+
+    assert other.exists()
+    assert loaded.parent.exists()
+
+
+def test_nothing_is_deleted_when_the_counts_do_not_match(tmp_path):
+    """A load job that skipped rows and one that took them all look the same
+    from outside. The difference is the data this would erase from the only
+    other place it exists."""
+    paths = [_partition(tmp_path, "2011-07-01", rows=9)]
+
+    with pytest.raises(ValueError, match="no se purga"):
+        purge(paths, _report(7))
+
+    assert paths[0].exists()
+
+
+# --- one load job per batch, not one per file ---
+
+
+class FakeBigQuery:
+    """Enough of a client to see how many load jobs a batch costs."""
+
+    # Signatures match google-cloud-bigquery's, unused arguments and all: this
+    # stands in for the real client, so it has to be callable the same way.
+
+    def __init__(self, staged_rows: int):
+        self.staged_rows = staged_rows
+        self.loaded: list[bytes] = []
+
+    def get_table(self, ref):  # noqa: ARG002
+        return SimpleNamespace(schema=[], num_rows=self.staged_rows)
+
+    def create_table(self, table):
+        return table
+
+    def load_table_from_file(self, handle, ref, job_config):  # noqa: ARG002
+        self.loaded.append(handle.read())
+        return SimpleNamespace(result=lambda: None)
+
+    def query(self, sql):
+        self.sql = sql
+        return SimpleNamespace(result=lambda: None, num_dml_affected_rows=self.staged_rows)
+
+    def delete_table(self, ref, not_found_ok=False):  # noqa: ARG002
+        self.dropped = ref
+
+
+def test_a_batch_costs_one_load_job_however_many_files_it_has(tmp_path):
+    """BigQuery allows 1 500 load jobs per table per day. A quarter of the
+    backfill is ~180 partitions, so per file the 116 quarters would be ~21 000
+    jobs and would hit the quota on the first day. Measured before the fix:
+    198 jobs for half a year of one market."""
+    paths = [_partition(tmp_path, f"2011-07-{day:02d}", rows=2) for day in range(1, 11)]
+    client = FakeBigQuery(staged_rows=20)
+
+    report = load(paths, client=client, staging_dir=tmp_path)
+
+    assert len(client.loaded) == 1
+    assert report.files == 10
+
+
+def test_the_batch_carries_every_line_of_every_file(tmp_path):
+    paths = [_partition(tmp_path, "2011-07-01", rows=3), _partition(tmp_path, "2011-07-04", rows=4)]
+    client = FakeBigQuery(staged_rows=7)
+
+    load(paths, client=client, staging_dir=tmp_path)
+
+    assert client.loaded[0].count(b"\n") == 7
+
+
+def test_the_merge_is_pruned_to_the_dates_actually_loaded(tmp_path):
+    paths = [_partition(tmp_path, "2011-07-01", rows=1), _partition(tmp_path, "2011-09-30", rows=1)]
+    client = FakeBigQuery(staged_rows=2)
+
+    load(paths, client=client, staging_dir=tmp_path)
+
+    assert "DATE '2011-07-01' AND DATE '2011-09-30'" in client.sql

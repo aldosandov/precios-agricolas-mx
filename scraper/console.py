@@ -16,6 +16,7 @@ A spider is free to know nothing about this. Two optional members are read if
 they exist, and their absence only costs detail:
 
     failures: list[str]     lines to print, one per window the spider lost
+    notes: list[str]        lines worth seeing that are not failures
     progress() -> Snapshot  how far along the work is, in the spider's own unit
 
 Without `progress()` the bar has no total to fill: responses are counted, but
@@ -90,6 +91,7 @@ class ProgressConsole:
         # How many of the spider's failures have already reached the screen, so
         # a list that only grows is not reprinted from the top on every tick.
         self.reported = 0
+        self.noted = 0
         # Elapsed seconds at the last plain line, so the interval is measured
         # from what was printed and not from what the reactor felt like ticking.
         self._last_plain: float | None = None
@@ -166,11 +168,21 @@ class ProgressConsole:
         return due
 
     def _drain_failures(self) -> None:
-        """One line per failure, the moment it appears, above everything else."""
+        """One line per failure and per note, the moment it appears.
+
+        Read from the spider's own lists rather than pushed here, so a spider
+        that has never heard of this console still works, and so the counters
+        below only ever print what is new.
+        """
         failures = list(getattr(self.spider, "failures", []))
         for failure in failures[self.reported :]:
             self.console.print(f"[bold red]✗[/] {failure}", highlight=False)
         self.reported = len(failures)
+
+        notes = list(getattr(self.spider, "notes", []))
+        for note in notes[self.noted :]:
+            self.console.print(f"[green]·[/] {note}", highlight=False)
+        self.noted = len(notes)
 
     # --- what we know ---
 

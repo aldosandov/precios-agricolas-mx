@@ -11,6 +11,7 @@ Runs offline against the ALD-13 fixtures; the reactor never starts.
 
 import asyncio
 from datetime import date
+from pathlib import Path
 
 import pytest
 from scrapy.http import HtmlResponse, Request, Response
@@ -19,6 +20,7 @@ from twisted.python.failure import Failure
 
 from scraper.backfill_state import CoverageStore, plan_grid
 from scraper.fixtures import FIXTURES_DIR
+from scraper.pipelines.ndjson import PartitionWriter
 from scraper.spiders.backfill import BackfillSpider
 
 TODAY = date(2026, 8, 6)
@@ -259,3 +261,108 @@ def test_one_broken_block_does_not_stop_the_other(store, quarter):
 
     assert store.pending(quarter) == [quarter[0]]
     assert spider.progress().done == 2  # both resolved, one of them badly
+
+
+# --- handing a finished quarter over (ALD-55) ---
+
+
+def _watched(store, blocks, **kwargs):
+    spider = _spider(store, blocks, **kwargs)
+    handed: list = []
+    spider.on_quarter = lambda start, end: handed.append((start, end))
+    return spider, handed
+
+
+def test_a_quarter_is_handed_over_when_its_last_block_resolves(store, quarter):
+    """Its dates are complete on disk at that moment and nowhere else: ~10.7 GB
+    of NDJSON for the whole history, on a personal laptop."""
+    spider, handed = _watched(store, quarter)
+    first, second = _started(spider)
+
+    _parse(spider, first, "range_destination_fixed")
+    assert handed == []
+
+    _parse(spider, second, "range_destination_fixed")
+
+    assert handed == [Q3_2011]
+
+
+def test_a_quarter_is_handed_over_once_and_not_per_block(store, quarter):
+    spider, handed = _watched(store, quarter)
+    for request in _started(spider):
+        _parse(spider, request, "range_destination_fixed")
+
+    assert len(handed) == 1
+
+
+def test_a_block_that_failed_still_completes_its_quarter(store, quarter):
+    """What was captured belongs in BigQuery; the block comes back next session
+    and merges on top."""
+    spider, handed = _watched(store, quarter)
+    first, second = _started(spider)
+
+    _parse(spider, first, "rejected_all_criteria")
+    _parse(spider, second, "range_destination_fixed")
+
+    assert handed == [Q3_2011]
+
+
+def test_a_quarter_cut_short_by_limit_is_handed_over_with_what_it_got(store, quarter):
+    """A session owes only the blocks it scheduled, so half a quarter is still
+    handed over. That is safe and deliberate: the load is idempotent, and the
+    markets left out are fetched next session and merged on top. Holding the
+    partition back instead would be the thing that grows the disk."""
+    spider, handed = _watched(store, quarter, limit=1)
+
+    _parse(spider, _started(spider)[0], "range_destination_fixed")
+
+    assert spider.blocks == quarter[:1]
+    assert handed == [Q3_2011]
+
+
+def test_each_quarter_is_handed_over_separately(store):
+    blocks = [
+        block
+        for block in plan_grid(today=TODAY, destinations=[PUEBLA])
+        if block.start.year == 2011
+    ]
+    spider, handed = _watched(store, blocks)
+
+    for request in _started(spider):
+        _parse(spider, request, "range_destination_fixed")
+
+    assert [start for start, _ in handed] == [
+        date(2011, 1, 1),
+        date(2011, 4, 1),
+        date(2011, 7, 1),
+        date(2011, 10, 1),
+    ]
+
+
+def test_a_quarter_waits_for_the_pipeline_before_it_is_loaded(store, quarter):
+    """Scrapy processes items after the callback's generator has ended, so
+    every block resolving does not mean every row is written. Measured when it
+    loaded anyway: 7 585 rows into BigQuery of the 7 770 on disk."""
+    from scraper.spiders.backfill import QuarterLoader
+
+    spider = _spider(store, quarter)
+    writer = PartitionWriter(Path("/dev/null/never-written"))
+    loader = QuarterLoader(spider, writer=writer)
+    spider.harvested[date(2011, 7, 1)] = 384
+
+    assert loader._settled(*Q3_2011) is False
+
+    writer.rows[date(2011, 7, 15)] = 384
+
+    assert loader._settled(*Q3_2011) is True
+
+
+def test_rows_outside_the_range_do_not_count_as_the_quarter_catching_up(store, quarter):
+    from scraper.spiders.backfill import QuarterLoader
+
+    spider = _spider(store, quarter)
+    writer = PartitionWriter(Path("/dev/null/never-written"))
+    writer.rows[date(2011, 10, 1)] = 500
+    spider.harvested[date(2011, 7, 1)] = 384
+
+    assert QuarterLoader(spider, writer=writer)._settled(*Q3_2011) is False

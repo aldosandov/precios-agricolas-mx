@@ -231,3 +231,59 @@ def test_accents_are_written_as_utf8_and_not_escaped(tmp_path):
 
     assert "Chile ancho" in text
     assert "\\u" not in text
+
+
+# --- handing a finished date range over while the run continues (ALD-55) ---
+
+
+def _row(day: str) -> dict:
+    return {"fecha": day, "destino_id": 210, "tipo_precio": "kilogramo_calculado"}
+
+
+def test_a_partition_still_open_is_missing_its_last_rows_on_disk(tmp_path):
+    """Why close_dated exists: rows sit in the file object's buffer until it is
+    closed. Measured in a real run, a quarter counted 7 770 rows on disk and
+    put 7 249 into BigQuery."""
+    writer = PartitionWriter(tmp_path)
+    path = writer.write(_row("2011-07-01"))
+
+    assert path.read_text(encoding="utf-8") == ""
+
+    writer.close()
+
+
+def test_closing_a_date_range_puts_all_of_it_on_disk(tmp_path):
+    writer = PartitionWriter(tmp_path)
+    inside = writer.write(_row("2011-07-01"))
+    outside = writer.write(_row("2011-10-01"))
+
+    writer.close_dated(date(2011, 7, 1), date(2011, 9, 30))
+
+    assert inside.read_text(encoding="utf-8").count("\n") == 1
+    assert outside.read_text(encoding="utf-8") == ""
+    writer.close()
+
+
+def test_a_range_closed_and_written_to_again_appends(tmp_path):
+    """A block of that quarter retried later in the session must not truncate
+    what was already handed over."""
+    writer = PartitionWriter(tmp_path)
+    writer.write(_row("2011-07-01"))
+    writer.close_dated(date(2011, 7, 1), date(2011, 7, 1))
+
+    path = writer.write(_row("2011-07-01"))
+    writer.close()
+
+    assert path.read_text(encoding="utf-8").count("\n") == 2
+
+
+def test_only_so_many_partitions_stay_open_at_once(tmp_path):
+    """A backfill quarter spans ~90 dates across 47 markets and two price
+    modes: 8 460 files, which is EMFILE with the usual 1024 descriptors."""
+    writer = PartitionWriter(tmp_path, max_open=4)
+
+    for day in range(1, 11):
+        writer.write(_row(f"2011-07-{day:02d}"))
+
+    assert len(writer._open) == 4
+    assert len(writer.close()) == 10

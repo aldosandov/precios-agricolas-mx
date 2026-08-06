@@ -202,6 +202,48 @@ Dos cosas que se midieron al cablear el spider (ALD-30) y que no son obvias:
   de 512: la regla de "truncar la primera vez, anexar después" ya permitía
   cerrar y reabrir, solo faltaba hacerlo.
 
+## Carga por trimestre (ALD-55)
+
+Cada trimestre terminado se carga a BigQuery y se borra del disco: el histórico
+completo son ~10.7 GB de NDJSON y esto corre en una laptop. En vuelo nunca hay
+más de un trimestre, ~93 MB.
+
+- **`transform.load` manda un solo job de carga por lote, no uno por archivo.**
+  BigQuery permite **1 500 jobs de carga por tabla por día** y un trimestre son
+  ~180 particiones: por archivo, los 116 trimestres serían ~21 000 jobs y la
+  cuota se agotaría el primer día. Medido antes del arreglo: 198 jobs para
+  medio año de un mercado. Ahora concatena a un temporal y carga una vez.
+- **Antes de purgar se cuentan las filas del disco contra las de la tabla de
+  paso.** Una carga que se saltó filas y una que las tomó todas se ven igual
+  desde afuera, y la diferencia es lo que está por borrarse del único otro
+  lugar donde existe.
+- **Un trimestre terminado no está en disco todavía.** Dos capas de retraso, y
+  las dos costaron una corrida real:
+  1. **Scrapy procesa los items después de que el generador del callback
+     terminó**, así que "todos los bloques del trimestre resolvieron" no es
+     "todas las filas se escribieron". El `QuarterLoader` espera a que el
+     conteo del `PartitionWriter` alcance al que el spider entregó, antes de
+     cargar.
+  2. **Las filas se quedan en el búfer del objeto archivo** hasta cerrarlo, así
+     que además hay que `close_dated()` el rango antes de que nadie lo lea.
+     Reabrir después anexa, por la misma regla de primer contacto.
+
+  Medido sin lo primero: 7 585 filas a BigQuery de las 7 770 que aparecieron en
+  disco un momento después. Sin lo segundo, 7 249. El guardia de conteo antes
+  de purgar atrapó las dos veces — sin él la purga habría borrado filas que
+  nunca llegaron.
+- **`QuarterLoader.wait()` cuelga de `spider_closed`.** El reactor se detiene en
+  cuanto el crawl queda ocioso, y una carga que sigue en su hilo en ese momento
+  queda a medias — medido: el último trimestre se cargó dos veces, una por el
+  hilo que nadie esperó y otra por el barrido de sobrantes. Scrapy sí espera a
+  los handlers de `spider_closed` que devuelven un `Deferred`.
+- El spider **nunca importa `transform/`**. El único lugar donde las dos
+  mitades se conocen es el `main()` del backfill.
+- `Spider.closed(reason)` **no es un handler de señal**: `Spider.close` lo llama
+  directo con el motivo, así que el argumento no es opcional. Quitarlo (por
+  ejemplo para callar a `ARG002`) levanta un `TypeError` que Scrapy atrapa y
+  loguea, y lo que hubiera que cerrar nunca se cierra.
+
 ## Restricciones no negociables
 
 1. Nunca paginar. El volumen se controla por ventana de fechas (subdivisión

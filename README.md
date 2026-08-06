@@ -185,6 +185,16 @@ Una sola ventana ilegible tiñe su trimestre entero y lo devuelve a la cola.
 Repetirlo solo cuesta peticiones, porque la carga es idempotente; registrar como
 cubierto un trimestre del que faltó un pedazo sería el único fallo sin rastro.
 
+**Cada trimestre terminado se carga a BigQuery y se borra del disco.** El
+histórico completo son ~10.7 GB de NDJSON y esto corre en una laptop, así que no
+se guarda lo que ya está en un lugar mejor: en vuelo nunca hay más de un
+trimestre, ~93 MB. Antes de borrar se cuentan las filas del disco contra las que
+entraron a la tabla de paso — una carga que se saltó filas y una que las tomó
+todas se ven igual desde afuera, y la diferencia es justo lo que se va a borrar.
+El orden cronológico de la rejilla es lo que además abarata el `MERGE`: el rango
+de fechas lo poda a las particiones de ese trimestre en vez de barrer el
+histórico. Con `--no-load` solo se deja el NDJSON.
+
 La caché HTTP se queda apagada. Se había puesto para que el backfill reanudara
 sin volver a descargar; eso lo hace ahora la tabla de cobertura con unos cientos
 de KB, contra los 20+ GB que costaría cachear 9 600 respuestas de megabytes.
@@ -194,10 +204,13 @@ de KB, contra los 20+ GB que costaría cachear 9 600 respuestas de megabytes.
 ```bash
 uv run python -m transform.load --dry-run   # listar sin tocar nada
 uv run python -m transform.load
+uv run python -m transform.load --desde 2011-07-01 --hasta 2011-09-30 --purge
 ```
 
 Corre aparte del scraper: el spider deja archivos, esto los lee. La carga por
-archivo es gratuita y la inserción en streaming no.
+archivo es gratuita y la inserción en streaming no. El único lugar donde las dos
+mitades se conocen es el `main()` del backfill, que engancha la carga de cada
+trimestre terminado; el spider nunca importa `transform/`.
 
 ### Catálogos y fixtures
 

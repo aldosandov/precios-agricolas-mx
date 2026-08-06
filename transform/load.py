@@ -8,16 +8,23 @@ a staging table and a MERGE instead of replacing whole partitions. The sweep
 writes one market at a time, so truncating the day to load market 210 would
 drop the 48 already in it — the simpler path is the one that loses data.
 
+Every batch is one load job, however many files it holds: BigQuery allows 1 500
+load jobs per table per day, and the backfill's 116 quarters at ~180 partitions
+each would be ~21 000 of them.
+
 Usage:
     uv run python -m transform.load                    # todo lo que haya en out/raw
     uv run python -m transform.load --dir out/raw --dry-run
     uv run python -m transform.load --table proyecto.dataset.tabla
+    uv run python -m transform.load --desde 2011-07-01 --hasta 2011-09-30 --purge
 """
 
 from __future__ import annotations
 
 import argparse
+import shutil
 import sys
+import tempfile
 import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -43,25 +50,74 @@ class LoadReport:
     dates: tuple[date, ...]
 
 
-def partition_files(root: Path = RAW_DIR) -> list[Path]:
-    """Every NDJSON partition under `root`, in date order."""
-    return sorted(root.rglob("*.ndjson"))
-
-
-def partition_dates(paths: Sequence[Path]) -> list[date]:
-    """The dates those partitions belong to, read from their directory names.
+def partition_date(path: Path) -> date:
+    """The date a partition belongs to, read from its directory name.
 
     Raises on anything outside a `fecha=` directory: without a date there is
     nothing to prune the MERGE by, and an unpruned MERGE reads every partition
     of the whole history.
     """
-    dates = set()
+    name = path.parent.name
+    if not name.startswith("fecha="):
+        raise ValueError(f"{path} no está en un directorio fecha=YYYY-MM-DD")
+    return date.fromisoformat(name.removeprefix("fecha="))
+
+
+def partition_files(
+    root: Path = RAW_DIR, *, since: date | None = None, until: date | None = None
+) -> list[Path]:
+    """Every NDJSON partition under `root`, in date order, within the range.
+
+    The backfill loads a quarter at a time so the MERGE prunes to that
+    quarter's partitions instead of reading the whole history, and so the
+    files can be dropped once they are in.
+    """
+    paths = sorted(root.rglob("*.ndjson"))
+    if since is None and until is None:
+        return paths
+    return [
+        path
+        for path in paths
+        if (since is None or partition_date(path) >= since)
+        and (until is None or partition_date(path) <= until)
+    ]
+
+
+def partition_dates(paths: Sequence[Path]) -> list[date]:
+    """The dates those partitions belong to, deduplicated and sorted."""
+    return sorted({partition_date(path) for path in paths})
+
+
+def count_rows(paths: Sequence[Path]) -> int:
+    """Lines across the given partitions — one row of the raw layer each."""
+    return sum(
+        sum(1 for line in path.open("rb") if line.strip()) for path in paths
+    )
+
+
+def purge(paths: Sequence[Path], report: LoadReport) -> int:
+    """Delete partitions already in BigQuery, and only those.
+
+    Counted before deleting, not trusted: a load job that skipped rows and a
+    load job that took them all look the same from the outside, and the
+    difference is the data this is about to remove from the only other place it
+    exists.
+    """
+    staged = count_rows(paths)
+    if staged != report.staged_rows:
+        raise ValueError(
+            f"no se purga: {staged} filas en disco contra {report.staged_rows} "
+            f"en la tabla de paso"
+        )
+
     for path in paths:
-        name = path.parent.name
-        if not name.startswith("fecha="):
-            raise ValueError(f"{path} no está en un directorio fecha=YYYY-MM-DD")
-        dates.add(date.fromisoformat(name.removeprefix("fecha=")))
-    return sorted(dates)
+        path.unlink()
+    # The date directory goes too once it is empty, so `out/raw` does not fill
+    # up with thousands of husks across a backfill of 116 quarters.
+    for parent in {path.parent for path in paths}:
+        if parent.exists() and not any(parent.iterdir()):
+            parent.rmdir()
+    return len(paths)
 
 
 def build_merge_sql(*, target: str, staging: str, start: date, end: date) -> str:
@@ -101,8 +157,9 @@ def load(
     *,
     target: str = RAW_TABLE,
     client=None,
+    staging_dir: Path | None = None,
 ) -> LoadReport:
-    """Stage every file, upsert once, drop the staging table."""
+    """Stage every file in one job, upsert once, drop the staging table."""
     from google.cloud import bigquery
 
     if not paths:
@@ -118,11 +175,19 @@ def load(
     )
 
     try:
-        for path in paths:
-            with path.open("rb") as handle:
-                client.load_table_from_file(
-                    handle, staging.reference, job_config=job_config
-                ).result()
+        # One load job for the whole batch, not one per file. BigQuery allows
+        # 1 500 load jobs per table per day, and a quarter of the backfill is
+        # ~180 partitions: per file, the 116 quarters would be ~21 000 jobs and
+        # would hit the quota on the first day. Concatenating costs one pass
+        # over ~93 MB and a temporary copy of it.
+        with tempfile.TemporaryFile(dir=staging_dir) as batch:
+            for path in paths:
+                with path.open("rb") as handle:
+                    shutil.copyfileobj(handle, batch)
+            batch.seek(0)
+            client.load_table_from_file(
+                batch, staging.reference, job_config=job_config
+            ).result()
 
         staged_rows = client.get_table(staging.reference).num_rows
         merge = client.query(
@@ -151,6 +216,14 @@ def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--dir", type=Path, default=RAW_DIR)
     parser.add_argument("--table", default=RAW_TABLE)
+    parser.add_argument("--desde", type=date.fromisoformat, help="primera fecha a cargar")
+    parser.add_argument("--hasta", type=date.fromisoformat, help="última fecha a cargar")
+    parser.add_argument(
+        "--purge",
+        action="store_true",
+        help="borrar las particiones cargadas, tras cotejar filas contra la "
+        "tabla de paso; el backfill lo usa para no acumular 10 GB en la laptop",
+    )
     parser.add_argument(
         "--dry-run",
         action="store_true",
@@ -158,7 +231,7 @@ def main(argv: list[str]) -> int:
     )
     args = parser.parse_args(argv)
 
-    paths = partition_files(args.dir)
+    paths = partition_files(args.dir, since=args.desde, until=args.hasta)
     if not paths:
         print(f"no hay particiones en {args.dir}", file=sys.stderr)
         return 1
@@ -175,6 +248,8 @@ def main(argv: list[str]) -> int:
         f"{report.files} archivo(s), {report.staged_rows} filas en paso -> "
         f"{report.affected_rows} insertadas o actualizadas en {report.table}"
     )
+    if args.purge:
+        print(f"purgadas {purge(paths, report)} partición(es) de {args.dir}")
     return 0
 
 
