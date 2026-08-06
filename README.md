@@ -149,6 +149,36 @@ columna no es atribuible y detiene la ingesta.
 lo marca la capa intermedia, que nunca corrige. El contrato es sobre
 identidad, no sobre valores.
 
+## Salida: NDJSON particionado por fecha
+
+`scraper/pipelines/ndjson.py` convierte los registros del contrato en la fila
+de la capa cruda del PRD (§10) y los escribe a archivos, nunca por streaming:
+la carga por archivo a BigQuery es gratuita y la inserción en streaming no.
+
+```
+out/raw/fecha=2026-07-01/destino=210_precio=kilogramo_calculado.ndjson
+out/raw/fecha=2026-07-02/destino=210_precio=kilogramo_calculado.ndjson
+```
+
+Un archivo por fecha, mercado y modo de precio. Como una ventana se consulta
+completa, cada fecha cae en un solo archivo, y volver a correr esa ventana lo
+**reescribe** en vez de agregarle una segunda copia del mismo día: ahí está la
+idempotencia, sin necesidad de deduplicar después.
+
+Aquí es donde las cadenas se vuelven la fila de §10: `fecha` en ISO,
+`precio_min/max/frecuente` numéricos (con separador de miles resuelto),
+`tipo_precio` como nombre (`kilogramo_calculado`, `presentacion_comercial`) en
+vez del id que se mandó, y `llave_fila` como sha256 de la llave natural, que
+distingue los dos modos de precio de la misma observación.
+
+Las banderas de calidad viajan con la fila y **nada se corrige**: un precio en
+cero, ausente o ilegible se marca (`precio_cero`, `precio_ausente`,
+`precio_no_numerico`) y se conserva tal cual; si el mínimo, el frecuente y el
+máximo no van en orden, se marca `precios_incoherentes`. Lo único que detiene
+la ingesta aquí es una fecha ilegible, porque sin fecha no hay partición.
+
+`out/` no se versiona.
+
 ## Fixtures
 
 El parser se prueba contra HTML real guardado, nunca inventado. Las

@@ -256,3 +256,6 @@ data/catalogs/market_coverage.partial.csv
 
 # Zone identifiers (Windows WSL artifacts)
 *.Zone.Identifier
+
+# Salida de la ingesta: NDJSON crudo, se carga a BigQuery y no se versiona
+out/

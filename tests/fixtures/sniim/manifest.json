@@ -2,13 +2,13 @@
   "range_product_fixed": {
     "file": "range_product_fixed.html",
     "url": "https://www.economia-sniim.gob.mx/nuevo/Consultas/MercadosNacionales/PreciosDeMercado/Agricolas/ResultadosConsultaFechaFrutasYHortalizas.aspx?fechaInicio=01%2F07%2F2026&fechaFinal=03%2F07%2F2026&ProductoId=740&OrigenId=-1&DestinoId=-1&PreciosPorId=2&RegistrosPorPagina=5000",
-    "purpose": "Forma que produce el barrido en producción: rango de fechas, un producto fijo, todos los orígenes y destinos. Trae la columna Fecha.",
+    "purpose": "Rango de fechas con un producto fijo y todos los orígenes y destinos. Trae la columna Fecha y, a diferencia del barrido, también Destino.",
     "bytes": 94357
   },
   "range_destination_fixed": {
     "file": "range_destination_fixed.html",
     "url": "https://www.economia-sniim.gob.mx/nuevo/Consultas/MercadosNacionales/PreciosDeMercado/Agricolas/ResultadosConsultaFechaFrutasYHortalizas.aspx?fechaInicio=01%2F07%2F2026&fechaFinal=03%2F07%2F2026&ProductoId=-1&OrigenId=-1&DestinoId=210&PreciosPorId=2&RegistrosPorPagina=5000",
-    "purpose": "Todos los productos contra un solo mercado. Añade Producto y Calidad, quita Destino, y mete filas separadoras de categoría (Frutas / Frutas de Temporada / Hortalizas / Chiles Secos).",
+    "purpose": "Forma que produce el barrido en producción (PRD §8.2): todos los productos contra un solo mercado. Añade Producto y Calidad, quita Destino, y mete filas separadoras de categoría (Frutas / Frutas de Temporada / Hortalizas / Chiles Secos).",
     "bytes": 152210
   },
   "paginated_overflow": {

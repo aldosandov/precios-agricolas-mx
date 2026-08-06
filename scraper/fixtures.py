@@ -46,16 +46,18 @@ BASE = {"OrigenId": "-1", "DestinoId": "-1", "PreciosPorId": "2", "RegistrosPorP
 FIXTURES: dict[str, dict[str, object]] = {
     "range_product_fixed": {
         "purpose": (
-            "Forma que produce el barrido en producción: rango de fechas, un "
-            "producto fijo, todos los orígenes y destinos. Trae la columna Fecha."
+            "Rango de fechas con un producto fijo y todos los orígenes y "
+            "destinos. Trae la columna Fecha y, a diferencia del barrido, "
+            "también Destino."
         ),
         "query": {**BASE, **RANGE, "ProductoId": PAPA_ALPHA},
     },
     "range_destination_fixed": {
         "purpose": (
-            "Todos los productos contra un solo mercado. Añade Producto y "
-            "Calidad, quita Destino, y mete filas separadoras de categoría "
-            "(Frutas / Frutas de Temporada / Hortalizas / Chiles Secos)."
+            "Forma que produce el barrido en producción (PRD §8.2): todos los "
+            "productos contra un solo mercado. Añade Producto y Calidad, quita "
+            "Destino, y mete filas separadoras de categoría (Frutas / Frutas de "
+            "Temporada / Hortalizas / Chiles Secos)."
         ),
         "query": {**BASE, **RANGE, "ProductoId": "-1", "DestinoId": CEDA_PUEBLA},
     },

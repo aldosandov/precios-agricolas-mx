@@ -138,8 +138,12 @@ es segura.
 
    > No puede seleccionar todos los productos todos los origenes y todos los destinos
 
-   Basta fijar uno de los tres para que devuelva datos. La estrategia de
-   barrido es iterar por `ProductoId` con origen y destino en `-1`.
+   Basta fijar uno de los tres para que devuelva datos. **La estrategia de
+   barrido fija el destino** (PRD §8.2): iterar por `DestinoId` con producto
+   y origen en `-1` cuesta 49 peticiones por bloque, contra 222 si se fijara
+   el producto, y además la tabla conserva `Producto`, `Calidad`,
+   `Presentación` y `Origen`, que es el máximo detalle disponible en una
+   sola respuesta.
 
 2. **`PreciosPorId` sí cambia los valores.** Con `2`, los precios de
    presentaciones no unitarias vienen divididos entre el peso de la
@@ -276,10 +280,15 @@ Por eso el parser mapea por nombre de encabezado, nunca por posición
 (restricción 3). El vocabulario de encabezados conocidos tiene que cubrir
 las siete columnas posibles, no solo las de una forma de consulta.
 
-El scraper barre con producto fijo y origen/destino en `-1` sobre rangos de
-fechas, así que en la práctica siempre ve la primera forma. Las demás
-importan para las fixtures (ALD-13) y para que un cambio de estrategia no
-rompa la ingesta en silencio.
+El scraper barre con **destino fijo** y producto/origen en `-1` sobre rangos
+de fechas, así que en la práctica siempre ve la cuarta forma: sin `Destino`,
+con `Producto` y `Calidad`. Las demás importan para las fixtures (ALD-13) y
+para que un cambio de estrategia no rompa la ingesta en silencio.
+
+Como la columna `Destino` no viene, el registro crudo la reconstruye desde
+`data/catalogs/destinations.csv` por id (ALD-18). No es inferencia: ALD-12
+cotejó 16 216 filas y la etiqueta del catálogo coincide carácter por carácter
+con lo que sirve esa columna cuando sí aparece.
 
 Implementado en `scraper/parsers/results.py` (ALD-16). El marcado ayuda: el
 encabezado son celdas `td.titDATtab2`, los datos `td.Datos2` y el separador

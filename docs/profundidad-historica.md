@@ -133,10 +133,12 @@ Implementado en `scraper/coverage.py`.
 
 1. **El backfill (ALD-27) arranca en 1998**, no en 2007. Son nueve años más
    de histórico de los que suponía el PRD.
-2. El barrido de la Fase 2 es por producto y ventana de fechas, no por
-   mercado, así que estas fechas acotan el rango global; el detalle por
-   mercado sirve para validar la carga (una ventana sin filas para un
-   mercado inactivo es lo esperado, no un fallo).
+2. El barrido de la Fase 2 fija el mercado de destino (PRD §8.2), así que
+   esta tabla no solo acota el rango global: da el piso y el techo de cada
+   mercado y permite **no pedir los años que nunca tuvieron datos**. Dos
+   mercados se saltan enteros y cinco terminan antes de 2026. Los huecos
+   internos también quedan documentados aquí, para que una ventana vacía se
+   reconozca como esperada y no como fallo de ingesta.
 3. Las cifras de `total_rows` dan el orden de magnitud para dimensionar
    BigQuery: ~15.3 millones de filas en la capa cruda, lo que cabe holgado
    en la restricción de USD 20/mes con partición por día.

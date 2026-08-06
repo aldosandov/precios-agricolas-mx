@@ -13,16 +13,18 @@ bloqueo.
 
 El PRD marca la Fase 0 como "hecha" pero ningún artefacto había
 materializado — Fase 1 reconstruye eso desde cero antes de tocar BigQuery.
-Cerrados: ALD-5, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17. Sigue ALD-18
-(pipeline a NDJSON particionado), luego ALD-19, 30.
+Cerrados: ALD-5, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18. Sigue ALD-19
+(spider incremental diario), luego ALD-30 y ALD-23.
 
 En pie: `scraper/catalogs.py` (regenera `data/catalogs/`),
 `scraper/fixtures.py` (recaptura `tests/fixtures/sniim/`),
 `scraper/query.py` (URL + subdivisión de ventana, puro),
 `scraper/coverage.py` (profundidad histórica por mercado),
 `scraper/parsers/results.py` (tabla → columnas y filas, por encabezado),
-`scraper/contract.py` (registro crudo, llave natural, rechazo).
-Todavía vacíos `transform/`, `app/`, `scraper/spiders|pipelines/`.
+`scraper/contract.py` (registro crudo, llave natural, rechazo),
+`scraper/pipelines/ndjson.py` (fila §10, banderas de calidad, NDJSON por
+fecha en `out/`, no versionado). Todavía vacíos `transform/`, `app/`,
+`scraper/spiders/`.
 
 El registro crudo guarda cada criterio en dos planos: la etiqueta que dio la
 tabla y el id que se envió. La llave natural es
@@ -51,6 +53,11 @@ re-derivar:
 - `ProductoId`, `OrigenId` y `DestinoId` no pueden ser `-1` los tres a la
   vez (200 sin filas). El sentinela a excluir de catálogos es `-1`; el `0`
   sí es miembro (`Sin Especificar`).
+- **El barrido fija el destino** (PRD §8.2): 49 peticiones por bloque contra
+  222 si se fijara el producto, y la tabla conserva `Producto`, `Calidad`,
+  `Presentación` y `Origen`. Cada bloque se pide dos veces, una por cada
+  `PreciosPorId`. Los docs de ALD-8 decían "por producto"; se corrigió en
+  ALD-18.
 - `PreciosPorId` cambia los precios pero no la columna `Presentación`: no es
   inferible de la respuesta, hay que registrar qué se mandó.
 - `RegistrosPorPagina` acepta hasta `Int32.MaxValue`; el límite real es el
