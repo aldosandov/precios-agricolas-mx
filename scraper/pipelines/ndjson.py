@@ -19,9 +19,8 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
-from collections import Counter
 from collections.abc import Iterable, Sequence
-from datetime import date, datetime
+from datetime import datetime
 from pathlib import Path
 
 from scraper.contract import RawRecord
@@ -156,10 +155,6 @@ def _partition_name(row: dict) -> str:
     return f"destino={destination}_precio={row['tipo_precio']}.ndjson"
 
 
-def _dated(path: Path) -> date:
-    return date.fromisoformat(path.parent.name.removeprefix("fecha="))
-
-
 # How many partitions may be open at once. A backfill quarter spans ~90 dates
 # across 47 markets and two price modes: 8 460 files, which is EMFILE on any
 # machine with the usual 1024 descriptors. Reopening a partition costs one
@@ -184,11 +179,6 @@ class PartitionWriter:
         self.out_dir = out_dir
         self.paths: list[Path] = []
         self.max_open = max_open
-        # Rows taken in, by date. Whoever hands a finished date range to the
-        # loader needs to know the pipeline has caught up with the spider:
-        # Scrapy processes items after the callback's generator has already
-        # ended, so "every block resolved" does not mean "every row written".
-        self.rows: Counter[date] = Counter()
         # Insertion-ordered and moved on use, so the one evicted is the one
         # written to longest ago.
         self._open: dict[Path, object] = {}
@@ -202,11 +192,7 @@ class PartitionWriter:
         else:
             self._open[path] = self._open.pop(path)
         handle.write(json.dumps(row, ensure_ascii=False) + "\n")
-        self.rows[date.fromisoformat(row["fecha"])] += 1
         return path
-
-    def rows_between(self, start: date, end: date) -> int:
-        return sum(count for day, count in self.rows.items() if start <= day <= end)
 
     def _reopen(self, path: Path):
         while len(self._open) >= self.max_open:
@@ -220,20 +206,6 @@ class PartitionWriter:
             self._touched.add(path)
             self.paths.append(path)
         return handle
-
-    def close_dated(self, start, end) -> None:
-        """Close the partitions of a date range, so what is on disk is all of it.
-
-        Rows are buffered by the file object until it is closed, so anything
-        reading a partition while the run is still going sees a file missing
-        its last few kilobytes. Measured: a quarter handed over to the loader
-        mid-run counted 7 770 rows on disk and put 7 249 into BigQuery.
-
-        Reopening later appends, by the same first-touch rule as the eviction
-        above, so a block of this range retried afterwards is not lost.
-        """
-        for path in [p for p in self._open if start <= _dated(p) <= end]:
-            self._open.pop(path).close()
 
     def close(self) -> list[Path]:
         for handle in self._open.values():
@@ -258,12 +230,7 @@ class NdjsonPartitionPipeline:
 
     @classmethod
     def from_crawler(cls, crawler):
-        pipeline = cls(Path(crawler.settings.get("RAW_OUTPUT_DIR", RAW_DIR)))
-        # So whoever loads a finished date range can make sure it is all on
-        # disk first. A pipeline is otherwise unreachable from outside the
-        # item chain, and buffered rows read as missing ones.
-        crawler.raw_writer = pipeline.writer
-        return pipeline
+        return cls(Path(crawler.settings.get("RAW_OUTPUT_DIR", RAW_DIR)))
 
     def process_item(self, item):
         self.writer.write(item)

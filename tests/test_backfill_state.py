@@ -14,6 +14,7 @@ from datetime import date
 import pytest
 
 from scraper.backfill_state import (
+    SCHEMA,
     BlockLedger,
     Counts,
     CoverageStore,
@@ -122,10 +123,11 @@ def test_an_untouched_grid_is_entirely_pending(store, grid):
     assert store.pending(grid) == grid
 
 
-def test_a_finished_block_does_not_come_back(store, grid):
+def test_a_finished_and_loaded_block_does_not_come_back(store, grid):
     block = grid[0]
     store.open_block(block)
     store.close_block(block, rows=1200, requests=1)
+    store.mark_loaded(block.start, block.end)
 
     assert block not in store.pending(grid)
     assert len(store.pending(grid)) == len(grid) - 1
@@ -153,6 +155,7 @@ def test_a_run_that_died_resumes_without_repeating_what_it_covered(store, grid):
     for block in grid[:100]:
         store.open_block(block)
         store.close_block(block, rows=10, requests=1)
+    store.mark_loaded(grid[0].start, grid[99].end)
     store.open_block(grid[100])  # the one in flight when the laptop died
 
     resumed = store.pending(grid)
@@ -167,6 +170,7 @@ def test_a_block_closed_for_a_shorter_window_is_asked_again(store):
     yesterday = _one_market(date(2026, 8, 5))
     store.open_block(yesterday[-1])
     store.close_block(yesterday[-1], rows=10, requests=1)
+    store.mark_loaded(yesterday[-1].start, yesterday[-1].end)
 
     today = _one_market(TODAY)
 
@@ -190,6 +194,7 @@ def test_the_checkpoint_survives_the_process_that_wrote_it(tmp_path, grid):
     first = CoverageStore(path)
     first.open_block(grid[0])
     first.close_block(grid[0], rows=5, requests=1)
+    first.mark_loaded(grid[0].start, grid[0].end)
     del first  # no close(), no flush, nothing tidy
 
     with CoverageStore(path) as second:
@@ -206,7 +211,7 @@ def test_a_block_that_never_split_closes_on_its_only_response(store, grid):
     ledger.opened(block)
 
     assert ledger.finished(block, rows=300) is True
-    assert block not in store.pending(grid)
+    assert store.counts().done == 1
 
 
 def test_a_block_split_into_four_closes_once_with_the_rows_of_all_four(store, grid):
@@ -256,8 +261,92 @@ def test_a_block_that_breaks_does_not_stop_the_others(store, grid):
     ledger.failed(broken, "503 tras 4 intentos")
     ledger.finished(healthy, rows=42)
 
-    assert store.counts() == Counts(done=1, failed=1, open=0)
+    assert store.counts() == Counts(done=1, failed=1, open=0, unloaded=1)
     assert store.pending(grid)[0] == broken
+
+
+# --- swept is not safe until it is loaded (ALD-57) ---
+
+
+def test_a_swept_block_stays_in_the_queue_until_it_is_loaded(store, grid):
+    """The load runs after the sweep now, so `hecho` only means the rows are on
+    this laptop's disk — which is not somewhere they are safe."""
+    block = grid[0]
+    store.open_block(block)
+    store.close_block(block, rows=1200, requests=1)
+
+    assert block in store.pending(grid)
+    assert store.counts() == Counts(done=1, failed=0, open=0, unloaded=1)
+
+    store.mark_loaded(block.start, block.end)
+
+    assert block not in store.pending(grid)
+    assert store.counts().unloaded == 0
+
+
+def test_a_block_that_captured_nothing_is_safe_the_moment_it_closes(store, grid):
+    """It wrote no partition, so there is nothing on disk that could be lost.
+    Otherwise an empty quarter would be re-fetched every session forever."""
+    block = grid[0]
+    store.open_block(block)
+    store.close_block(block, rows=0, requests=1)
+
+    assert block not in store.pending(grid)
+
+
+def test_only_blocks_inside_the_loaded_range_are_marked(store, grid):
+    """A year is loaded and its blocks retire together. Blocks of a year whose
+    partitions are still on disk must not retire with it."""
+    inside = [block for block in grid if block.start.year == 1998]
+    outside = [block for block in grid if block.start.year == 1999]
+    for block in inside + outside:
+        store.open_block(block)
+        store.close_block(block, rows=10, requests=1)
+
+    marked = store.mark_loaded(date(1998, 1, 1), date(1998, 12, 31))
+
+    assert marked == len(inside)
+    assert store.pending(grid)[0] == outside[0]
+
+
+def test_a_retried_block_forgets_that_it_was_ever_loaded(store, grid):
+    """Reopening means the quarter is being swept again, so its rows are back
+    to living only on disk until the next load."""
+    block = grid[0]
+    store.open_block(block)
+    store.close_block(block, rows=10, requests=1)
+    store.mark_loaded(block.start, block.end)
+
+    store.open_block(block)
+
+    assert block in store.pending(grid)
+
+
+def test_a_database_written_before_the_column_existed_keeps_its_coverage(tmp_path, grid):
+    """Back then the load ran inside the sweep and a block was purged from disk
+    as it closed, so `hecho` did mean "in BigQuery". Migrating must not put the
+    covered history back in the queue."""
+    path = tmp_path / "cobertura.sqlite"
+    with CoverageStore(path) as before:
+        before.connection.execute("DROP TABLE cobertura")
+        before.connection.executescript(
+            SCHEMA.replace("    cargado_en      TEXT,\n", "")
+        )
+        before.connection.execute(
+            "INSERT INTO cobertura (destino_id, tipo_precio, bloque_inicio,"
+            " bloque_fin, estado, cerrado_en) VALUES (?, ?, ?, ?, 'hecho', ?)",
+            (
+                grid[0].destination_id,
+                grid[0].price_mode,
+                grid[0].start.isoformat(),
+                grid[0].end.isoformat(),
+                "2026-08-01T00:00:00+00:00",
+            ),
+        )
+
+    with CoverageStore(path) as after:
+        assert grid[0] not in after.pending(grid)
+        assert after.counts().unloaded == 0
 
 
 def test_the_failures_read_as_lines_and_not_as_rows(store, grid):

@@ -142,3 +142,31 @@ Implementado en `scraper/coverage.py`.
 3. Las cifras de `total_rows` dan el orden de magnitud para dimensionar
    BigQuery: ~15.3 millones de filas en la capa cruda, lo que cabe holgado
    en la restricción de USD 20/mes con partición por día.
+
+## Volúmenes medidos (ALD-57)
+
+Las cifras de abajo salieron de corridas reales, no de una estimación. La
+primera versión suponía ~350 B por fila de NDJSON; la medición dio **825 B**, o
+sea 2.4× todo lo dimensionado sobre esa base.
+
+| | Medido |
+| -- | -- |
+| NDJSON por fila | 825 B |
+| Por bloque (mercado × modo × trimestre) | ~2.6 MB |
+| Un trimestre completo en disco | ~437 MB |
+| Un año completo en disco | ~870 MB |
+| Histórico completo en NDJSON | **25.3 GB** |
+| Una hora de barrido | ~6.3 GB |
+| `crudo.precios` al terminar | 16.4 GB (535 B/fila) |
+
+Consecuencias, ya reflejadas en el código:
+
+- La carga corre **después** del barrido, así que el NDJSON de la sesión se
+  acumula: `--limit` es el control de disco de la sesión (~2.6 MB por bloque),
+  no una comodidad.
+- El costo en BigQuery sigue siendo despreciable contra el presupuesto: los
+  jobs de carga son cuota y no cobro (1 500/tabla/día), los `MERGE` del backfill
+  completo escanean ~16 GB —dentro del free tier de 1 TiB/mes— y el
+  almacenamiento son ~$0.33/mes. Eso depende del orden cronológico de la
+  rejilla: barrer por mercado obligaría a cada `MERGE` a leer el histórico
+  entero, ~620 GB acumulados.

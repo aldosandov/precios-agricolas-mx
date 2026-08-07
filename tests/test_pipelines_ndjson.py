@@ -233,43 +233,20 @@ def test_accents_are_written_as_utf8_and_not_escaped(tmp_path):
     assert "\\u" not in text
 
 
-# --- handing a finished date range over while the run continues (ALD-55) ---
+# --- thousands of partitions, and the usual 1024 descriptors ---
 
 
 def _row(day: str) -> dict:
     return {"fecha": day, "destino_id": 210, "tipo_precio": "kilogramo_calculado"}
 
 
-def test_a_partition_still_open_is_missing_its_last_rows_on_disk(tmp_path):
-    """Why close_dated exists: rows sit in the file object's buffer until it is
-    closed. Measured in a real run, a quarter counted 7 770 rows on disk and
-    put 7 249 into BigQuery."""
-    writer = PartitionWriter(tmp_path)
-    path = writer.write(_row("2011-07-01"))
-
-    assert path.read_text(encoding="utf-8") == ""
-
-    writer.close()
-
-
-def test_closing_a_date_range_puts_all_of_it_on_disk(tmp_path):
-    writer = PartitionWriter(tmp_path)
-    inside = writer.write(_row("2011-07-01"))
-    outside = writer.write(_row("2011-10-01"))
-
-    writer.close_dated(date(2011, 7, 1), date(2011, 9, 30))
-
-    assert inside.read_text(encoding="utf-8").count("\n") == 1
-    assert outside.read_text(encoding="utf-8") == ""
-    writer.close()
-
-
-def test_a_range_closed_and_written_to_again_appends(tmp_path):
-    """A block of that quarter retried later in the session must not truncate
-    what was already handed over."""
-    writer = PartitionWriter(tmp_path)
+def test_a_partition_evicted_and_written_to_again_appends(tmp_path):
+    """Eviction is only safe because of the first-touch rule: a rerun replaces
+    the day, but reopening it inside the same run must not truncate what the
+    run already wrote."""
+    writer = PartitionWriter(tmp_path, max_open=1)
     writer.write(_row("2011-07-01"))
-    writer.close_dated(date(2011, 7, 1), date(2011, 7, 1))
+    writer.write(_row("2011-10-01"))  # evicts the first
 
     path = writer.write(_row("2011-07-01"))
     writer.close()

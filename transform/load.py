@@ -10,7 +10,9 @@ drop the 48 already in it — the simpler path is the one that loses data.
 
 Every batch is one load job, however many files it holds: BigQuery allows 1 500
 load jobs per table per day, and the backfill's 116 quarters at ~180 partitions
-each would be ~21 000 of them.
+each would be ~21 000 of them. The batch is a **calendar year** (ALD-57): a
+block never crosses one, so grouping by year splits no unit of work, and the
+whole history costs 29 load jobs and 29 MERGEs.
 
 Usage:
     uv run python -m transform.load                    # todo lo que haya en out/raw
@@ -26,6 +28,7 @@ import shutil
 import sys
 import tempfile
 import uuid
+from collections import defaultdict
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
@@ -68,9 +71,9 @@ def partition_files(
 ) -> list[Path]:
     """Every NDJSON partition under `root`, in date order, within the range.
 
-    The backfill loads a quarter at a time so the MERGE prunes to that
-    quarter's partitions instead of reading the whole history, and so the
-    files can be dropped once they are in.
+    The backfill loads a year at a time so the MERGE prunes to that year's
+    partitions instead of reading the whole history, and so the files can be
+    dropped once they are in.
     """
     paths = sorted(root.rglob("*.ndjson"))
     if since is None and until is None:
@@ -86,6 +89,24 @@ def partition_files(
 def partition_dates(paths: Sequence[Path]) -> list[date]:
     """The dates those partitions belong to, deduplicated and sorted."""
     return sorted({partition_date(path) for path in paths})
+
+
+def by_year(paths: Sequence[Path]) -> dict[int, list[Path]]:
+    """Those partitions grouped by calendar year, oldest first.
+
+    The year is the batch the backfill loads: one job and one MERGE for it, 29
+    for the whole history against 116 per quarter. A block never crosses the
+    year boundary, so this splits no unit of work — a year loaded is a set of
+    blocks that can be retired whole.
+
+    It is still narrow enough to keep the MERGE pruned: the grid is
+    chronological, so a year's range reads that year's partitions and not the
+    history behind it.
+    """
+    years: dict[int, list[Path]] = defaultdict(list)
+    for path in paths:
+        years[partition_date(path).year].append(path)
+    return {year: years[year] for year in sorted(years)}
 
 
 def count_rows(paths: Sequence[Path]) -> int:
@@ -176,10 +197,11 @@ def load(
 
     try:
         # One load job for the whole batch, not one per file. BigQuery allows
-        # 1 500 load jobs per table per day, and a quarter of the backfill is
-        # ~180 partitions: per file, the 116 quarters would be ~21 000 jobs and
+        # 1 500 load jobs per table per day, and a year of the backfill is
+        # ~700 partitions: per file, the history would be ~30 000 jobs and
         # would hit the quota on the first day. Concatenating costs one pass
-        # over ~93 MB and a temporary copy of it.
+        # over the year's ~870 MB and a temporary copy of it, which is why the
+        # batch is a year and not the whole disk.
         with tempfile.TemporaryFile(dir=staging_dir) as batch:
             for path in paths:
                 with path.open("rb") as handle:
@@ -222,7 +244,9 @@ def main(argv: list[str]) -> int:
         "--purge",
         action="store_true",
         help="borrar las particiones cargadas, tras cotejar filas contra la "
-        "tabla de paso; el backfill lo usa para no acumular 10 GB en la laptop",
+        "tabla de paso. Ojo: purgar por aquí no marca los bloques como "
+        "cargados, así que el backfill los volvería a pedir. Para eso está "
+        "`python -m scraper.spiders.backfill --solo-cargar`",
     )
     parser.add_argument(
         "--dry-run",
@@ -237,19 +261,24 @@ def main(argv: list[str]) -> int:
         return 1
 
     dates = partition_dates(paths)
-    print(f"{len(paths)} archivo(s), {len(dates)} fecha(s): {dates[0]}..{dates[-1]}")
+    years = by_year(paths)
+    print(
+        f"{len(paths)} archivo(s), {len(dates)} fecha(s): {dates[0]}..{dates[-1]}"
+        f" · {len(years)} año(s), un job de carga cada uno"
+    )
     if args.dry_run:
         for path in paths:
             print(f"  {path}")
         return 0
 
-    report = load(paths, target=args.table)
-    print(
-        f"{report.files} archivo(s), {report.staged_rows} filas en paso -> "
-        f"{report.affected_rows} insertadas o actualizadas en {report.table}"
-    )
-    if args.purge:
-        print(f"purgadas {purge(paths, report)} partición(es) de {args.dir}")
+    for year, batch in years.items():
+        report = load(batch, target=args.table)
+        print(
+            f"{year}: {report.files} archivo(s), {report.staged_rows} filas en paso -> "
+            f"{report.affected_rows} insertadas o actualizadas en {report.table}"
+        )
+        if args.purge:
+            print(f"  purgadas {purge(batch, report)} partición(es) de {args.dir}")
     return 0
 
 

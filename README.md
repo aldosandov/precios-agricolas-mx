@@ -166,6 +166,7 @@ terminal, degrada sola a una línea de estado cada 30 segundos.
 ```bash
 uv run python -m scraper.spiders.backfill                  # seguir donde quedó
 uv run python -m scraper.spiders.backfill --limit 500      # una sesión acotada
+uv run python -m scraper.spiders.backfill --solo-cargar    # cargar lo que quedó en disco
 uv run python -m scraper.spiders.backfill --market 210 \
     --desde 2011-07-01 --hasta 2011-09-30
 uv run python -m scraper.backfill_state                    # cuánto falta, qué falló
@@ -185,15 +186,33 @@ Una sola ventana ilegible tiñe su trimestre entero y lo devuelve a la cola.
 Repetirlo solo cuesta peticiones, porque la carga es idempotente; registrar como
 cubierto un trimestre del que faltó un pedazo sería el único fallo sin rastro.
 
-**Cada trimestre terminado se carga a BigQuery y se borra del disco.** El
-histórico completo son ~10.7 GB de NDJSON y esto corre en una laptop, así que no
-se guarda lo que ya está en un lugar mejor: en vuelo nunca hay más de un
-trimestre, ~93 MB. Antes de borrar se cuentan las filas del disco contra las que
-entraron a la tabla de paso — una carga que se saltó filas y una que las tomó
-todas se ven igual desde afuera, y la diferencia es justo lo que se va a borrar.
-El orden cronológico de la rejilla es lo que además abarata el `MERGE`: el rango
-de fechas lo poda a las particiones de ese trimestre en vez de barrer el
-histórico. Con `--no-load` solo se deja el NDJSON.
+**La carga corre cuando el barrido termina, no dentro de él**, y va por año:
+un bloque nunca cruza el año calendario, así que agrupar por año no parte
+ninguna unidad de trabajo y el histórico completo cuesta 29 jobs de carga en vez
+de 116. Cada año cargado se purga del disco. Antes de borrar se cuentan las
+filas del disco contra las que entraron a la tabla de paso — una carga que se
+saltó filas y una que las tomó todas se ven igual desde afuera, y la diferencia
+es justo lo que se va a borrar. El orden cronológico de la rejilla es lo que
+además abarata el `MERGE`: el rango de fechas lo poda a las particiones de ese
+año en vez de barrer el histórico.
+
+Una sesión arranca cargando lo que haya quedado en `out/raw` de la anterior,
+antes de pedir nada: si murió entre el barrido y la carga, los datos están ahí y
+volver a pedirlos sería tirar peticiones. Un bloque solo sale de la cola cuando
+además quedó **cargado**, así que perder el NDJSON antes de cargarlo cuesta
+peticiones y nunca datos. `--solo-cargar` hace justo ese primer paso y termina;
+`--no-load` deja el NDJSON en disco sin tocar BigQuery. Ojo: correr
+`transform.load --purge` a mano no marca los bloques, y esos se volverían a
+pedir.
+
+**El histórico completo son 25.3 GB de NDJSON** (825 B por fila, medido) y esto
+corre en una laptop. Como nada se carga hasta el final del barrido, `--limit` es
+el control de disco de la sesión: ~2.6 MB por bloque, ~6.3 GB por hora de
+barrido. El arranque lo anuncia antes de pedir nada:
+
+```
+9 628 bloques pendientes · esta sesión hará 800 · ~2.0 GB de NDJSON antes de cargar
+```
 
 La caché HTTP se queda apagada. Se había puesto para que el backfill reanudara
 sin volver a descargar; eso lo hace ahora la tabla de cobertura con unos cientos
@@ -208,9 +227,11 @@ uv run python -m transform.load --desde 2011-07-01 --hasta 2011-09-30 --purge
 ```
 
 Corre aparte del scraper: el spider deja archivos, esto los lee. La carga por
-archivo es gratuita y la inserción en streaming no. El único lugar donde las dos
-mitades se conocen es el `main()` del backfill, que engancha la carga de cada
-trimestre terminado; el spider nunca importa `transform/`.
+archivo es gratuita y la inserción en streaming no. Un job de carga por año,
+por más archivos que traiga: BigQuery permite 1 500 jobs por tabla y por día, y
+por archivo el histórico serían ~30 000. El único lugar donde las dos mitades se
+conocen es el `main()` del backfill, que carga cuando el reactor ya murió; el
+spider nunca importa `transform/`.
 
 ### Catálogos y fixtures
 

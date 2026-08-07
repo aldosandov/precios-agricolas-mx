@@ -20,6 +20,7 @@ from transform.load import (
     RAW_TABLE,
     LoadReport,
     build_merge_sql,
+    by_year,
     count_rows,
     load,
     partition_dates,
@@ -142,7 +143,7 @@ def test_rows_are_counted_from_the_files_and_not_from_their_names(tmp_path):
 
 
 def test_purging_removes_the_partitions_and_their_empty_days(tmp_path):
-    """~10.7 GB of NDJSON for the whole history, on a personal laptop. What is
+    """25.3 GB of NDJSON for the whole history, on a personal laptop. What is
     already in BigQuery does not stay here."""
     paths = [_partition(tmp_path, "2011-07-01", rows=4), _partition(tmp_path, "2011-07-04", rows=6)]
 
@@ -234,3 +235,31 @@ def test_the_merge_is_pruned_to_the_dates_actually_loaded(tmp_path):
     load(paths, client=client, staging_dir=tmp_path)
 
     assert "DATE '2011-07-01' AND DATE '2011-09-30'" in client.sql
+
+
+# --- the batch is a calendar year (ALD-57) ---
+
+
+def test_partitions_are_grouped_by_year_oldest_first(tmp_path):
+    """A block never crosses the year, so a year loaded is a set of blocks that
+    can retire together."""
+    for day in ("2012-01-02", "2011-12-31", "2011-01-01"):
+        _partition(tmp_path, day)
+
+    years = by_year(partition_files(tmp_path))
+
+    assert list(years) == [2011, 2012]
+    assert len(years[2011]) == 2
+    assert len(years[2012]) == 1
+
+
+def test_a_year_costs_one_load_job(tmp_path):
+    """29 load jobs for the whole history, against 116 per quarter and ~21 000
+    per file."""
+    paths = [_partition(tmp_path, f"2011-{month:02d}-01", rows=2) for month in range(1, 13)]
+    client = FakeBigQuery(staged_rows=24)
+
+    load(by_year(paths)[2011], client=client, staging_dir=tmp_path)
+
+    assert len(client.loaded) == 1
+    assert "DATE '2011-01-01' AND DATE '2011-12-01'" in client.sql

@@ -21,11 +21,11 @@ GitHub: empujar a `main`, disparar el workflow (ALD-24) y confirmar que la
 alerta llega a Sentry con el DSN real (ALD-25).
 
 **Fase 2 en curso.** Cerrados ALD-53 (consola de progreso), ALD-26 (tabla de
-cobertura y reanudación), ALD-54 (`errback`) y ALD-30 (spider de backfill).
-Sigue ALD-55 (carga incremental y purga), ALD-56 (`docs/backfill.md`) y ALD-27
-(la corrida). El backfill **se ejecuta a mano en la laptop**, en
-sesiones de tiempo libre a lo largo de varios días: arrancar y parar es el
-modo normal de operación, no una falla.
+cobertura y reanudación), ALD-54 (`errback`), ALD-30 (spider de backfill),
+ALD-55 (carga y purga) y ALD-57 (desacoplar la carga, cargar por año). Sigue
+ALD-56 (`docs/backfill.md`) y ALD-27 (la corrida). El backfill **se ejecuta a
+mano en la laptop**, en sesiones de tiempo libre a lo largo de varios días:
+arrancar y parar es el modo normal de operación, no una falla.
 
 Observabilidad: `transform/monitor.py` consulta BigQuery después de cada
 corrida y manda a Sentry el resumen, los mercados activos sin datos, la
@@ -55,10 +55,10 @@ En pie:
 | `scraper/pipelines/ndjson.py` | Fila §10, banderas de calidad, NDJSON por fecha |
 | `scraper/spiders/daily.py` | Barrido diario: 43 mercados activos × 2 modos, ventana de 5 días |
 | `scraper/console.py` | Extensión de progreso para corridas largas (`rich`). Apagada por defecto |
-| `scraper/backfill_state.py` | Rejilla del backfill, checkpoint en SQLite y contabilidad de bloques |
+| `scraper/backfill_state.py` | Rejilla del backfill, checkpoint en SQLite (incluye `cargado_en`) y contabilidad de bloques |
 | `scraper/harvest.py` | Respuesta → filas y por qué una respuesta no sirve. Lo que comparten los dos spiders |
-| `scraper/spiders/backfill.py` | Backfill por bloques trimestrales, reanudable entre sesiones |
-| `transform/load.py` | Upsert de NDJSON a la capa cruda |
+| `scraper/spiders/backfill.py` | Backfill por bloques trimestrales, reanudable entre sesiones. Su `main()` carga por año después del barrido |
+| `transform/load.py` | Upsert de NDJSON a la capa cruda, un job de carga por año |
 | `transform/raw/prices_table.sql` | DDL de `crudo.precios` |
 | `transform/monitor.py` | Reporte de cobertura y alertas a Sentry |
 
@@ -172,11 +172,12 @@ precio, trimestre)**; el estado vive en `out/cobertura.sqlite`, no versionado.
   solo años con datos. Eso deja fuera los dos mercados muertos, los quince que
   arrancan tarde y los huecos internos. Son **9 628 bloques**, no 9 712: el
   trimestre en curso se recorta a hoy y el resto del año no se pide.
-- **Solo `hecho` saca un bloque de la cola.** Un bloque `abierto` (sesión
-  interrumpida) y uno `fallido` vuelven igual. Y "cubierto" significa cubierto
-  *hasta la misma fecha*: el trimestre en curso crece un día a la vez, así que
-  un bloque cerrado ayer deja de cuadrar con la rejilla y regresa solo, sin
-  caso especial para "hoy".
+- **Solo `hecho` con `cargado_en` saca un bloque de la cola** (ALD-57). Un
+  bloque `abierto` (sesión interrumpida), uno `fallido` y uno barrido pero no
+  cargado vuelven igual. Y "cubierto" significa cubierto *hasta la misma
+  fecha*: el trimestre en curso crece un día a la vez, así que un bloque
+  cerrado ayer deja de cuadrar con la rejilla y regresa solo, sin caso especial
+  para "hoy".
 - El trimestre es la unidad atómica pero son muchas peticiones, porque la
   ventana se subdivide en vuelo. `BlockLedger` lleva las peticiones en vuelo
   por bloque y cierra al llegar a cero. **Una sola ventana ilegible tiñe el
@@ -200,49 +201,88 @@ Dos cosas que se midieron al cablear el spider (ALD-30) y que no son obvias:
   fechas × 47 mercados × 2 modos = **8 460 archivos abiertos a la vez**, o sea
   `EMFILE` en cualquier máquina con el 1024 de siempre. Ahora hay un tope LRU
   de 512: la regla de "truncar la primera vez, anexar después" ya permitía
-  cerrar y reabrir, solo faltaba hacerlo.
+  cerrar y reabrir, solo faltaba hacerlo. Esto sí es del lado del barrido y
+  sigue vivo, a diferencia de todo lo demás que leía particiones a media
+  corrida.
 
-## Carga por trimestre (ALD-55)
+## Carga por año, después del barrido (ALD-55 + ALD-57)
 
-Cada trimestre terminado se carga a BigQuery y se borra del disco: el histórico
-completo son ~10.7 GB de NDJSON y esto corre en una laptop. En vuelo nunca hay
-más de un trimestre, ~93 MB.
+**La carga ya no corre dentro del barrido.** ALD-55 la acopló al crawl y
+funcionó, pero los tres bugs que costó salieron todos de la misma raíz:
+compartir proceso y ciclo de vida con el reactor. Ninguno existe si la carga
+corre después, con el reactor muerto y el `PartitionWriter` cerrado. Están
+documentados abajo porque explican por qué el orden es este, no porque sigan
+vivos.
 
+Orden de `backfill.main()`:
+
+1. cargar y purgar lo que ya estuviera en `out/raw`, y marcarlo;
+2. barrer;
+3. cargar y purgar lo de esta sesión, por año, y marcarlo.
+
+El paso 1 es lo que evita tirar peticiones: una sesión que muere entre el
+barrido y la carga deja bloques `hecho` sin `cargado_en` **y** su NDJSON en
+disco. `--no-load` salta 1 y 3; `--solo-cargar` hace 1 y termina.
+
+- **`hecho` ya no significa "a salvo".** Un bloque sale de la cola con
+  `estado = 'hecho' AND cargado_en IS NOT NULL`. Al diferir la carga, el NDJSON
+  en disco es la única copia durante toda la sesión: perderlo devuelve esos
+  bloques a la cola en vez de perder datos. Un bloque que capturó **cero filas**
+  se marca cargado al cerrar —no escribió partición, no hay nada que perder—; si
+  no, se repetiría cada sesión para siempre.
+- Correr `transform.load --purge` a mano **no marca** `cargado_en`: esos bloques
+  se vuelven a pedir. Fallo seguro (cuesta peticiones, no datos). Para cargar a
+  mano lo del backfill está `--solo-cargar`.
+- **El lote es el año calendario**, no el trimestre: un bloque nunca cruza el
+  año, así que agrupar por año no parte ninguna unidad de trabajo. 29 jobs de
+  carga y 29 `MERGE` para el histórico completo, contra 116 por trimestre.
 - **`transform.load` manda un solo job de carga por lote, no uno por archivo.**
-  BigQuery permite **1 500 jobs de carga por tabla por día** y un trimestre son
-  ~180 particiones: por archivo, los 116 trimestres serían ~21 000 jobs y la
-  cuota se agotaría el primer día. Medido antes del arreglo: 198 jobs para
-  medio año de un mercado. Ahora concatena a un temporal y carga una vez.
+  BigQuery permite **1 500 jobs de carga por tabla por día**; por archivo el
+  histórico serían ~30 000 jobs. Medido antes del arreglo: 198 jobs para medio
+  año de un mercado. Concatena a un temporal y carga una vez.
 - **Antes de purgar se cuentan las filas del disco contra las de la tabla de
-  paso.** Una carga que se saltó filas y una que las tomó todas se ven igual
-  desde afuera, y la diferencia es lo que está por borrarse del único otro
-  lugar donde existe.
-- **Un trimestre terminado no está en disco todavía.** Dos capas de retraso, y
-  las dos costaron una corrida real:
-  1. **Scrapy procesa los items después de que el generador del callback
-     terminó**, así que "todos los bloques del trimestre resolvieron" no es
-     "todas las filas se escribieron". El `QuarterLoader` espera a que el
-     conteo del `PartitionWriter` alcance al que el spider entregó, antes de
-     cargar.
-  2. **Las filas se quedan en el búfer del objeto archivo** hasta cerrarlo, así
-     que además hay que `close_dated()` el rango antes de que nadie lo lea.
-     Reabrir después anexa, por la misma regla de primer contacto.
-
-  Medido sin lo primero: 7 585 filas a BigQuery de las 7 770 que aparecieron en
-  disco un momento después. Sin lo segundo, 7 249. El guardia de conteo antes
-  de purgar atrapó las dos veces — sin él la purga habría borrado filas que
-  nunca llegaron.
-- **`QuarterLoader.wait()` cuelga de `spider_closed`.** El reactor se detiene en
-  cuanto el crawl queda ocioso, y una carga que sigue en su hilo en ese momento
-  queda a medias — medido: el último trimestre se cargó dos veces, una por el
-  hilo que nadie esperó y otra por el barrido de sobrantes. Scrapy sí espera a
-  los handlers de `spider_closed` que devuelven un `Deferred`.
+  paso**, y solo después se marca el año. Un año que falló en cualquier punto
+  deja sus particiones donde están y sus bloques en la cola.
+- El costo en BigQuery **no es la razón para nada de esto**: los jobs de carga
+  son cuota y no cobro, los `MERGE` del backfill completo escanean ~16 GB
+  (free tier: 1 TiB/mes) y el almacenamiento son ~$0.33/mes. Lo que sí sostiene
+  eso es el **orden cronológico de la rejilla**: el rango de fechas poda el
+  `MERGE` al año cargado. Barrer por mercado haría que cada `MERGE` leyera el
+  histórico entero: ~620 GB acumulados, $3.90.
 - El spider **nunca importa `transform/`**. El único lugar donde las dos
   mitades se conocen es el `main()` del backfill.
 - `Spider.closed(reason)` **no es un handler de señal**: `Spider.close` lo llama
   directo con el motivo, así que el argumento no es opcional. Quitarlo (por
   ejemplo para callar a `ARG002`) levanta un `TypeError` que Scrapy atrapa y
   loguea, y lo que hubiera que cerrar nunca se cierra.
+
+Lo que costó acoplar la carga al crawl (ALD-55), y que ya no aplica:
+
+1. **Scrapy procesa los items después de que el generador del callback
+   terminó**, así que "todos los bloques del trimestre resolvieron" no era
+   "todas las filas se escribieron": 7 585 filas a BigQuery de 7 770.
+2. **Las filas se quedan en el búfer del objeto archivo** hasta cerrarlo: sin
+   cerrar el rango, 7 249.
+3. **El reactor se detiene en cuanto el crawl queda ocioso**, y una carga en su
+   hilo en ese momento quedaba a medias: el último trimestre se cargó dos veces.
+
+## Volúmenes (medidos en ALD-57, no estimados)
+
+Los ~350 B por fila de las primeras versiones eran una estimación sin medir.
+La medición dio **825 B**, o sea 2.4× todo lo dimensionado sobre esa base.
+
+| | Medido |
+| -- | -- |
+| NDJSON por fila | 825 B |
+| Por bloque | ~2.6 MB |
+| Un año en disco | ~870 MB |
+| Histórico completo en NDJSON | **25.3 GB** |
+| Una hora de barrido | ~6.3 GB |
+| `crudo.precios` al terminar | 16.4 GB |
+
+Como nada se carga hasta que el barrido termina, **`--limit` es el control de
+disco de la sesión**, no una comodidad. El arranque lo anuncia: bloques
+pendientes, cuántos hará la sesión y cuánto NDJSON son.
 
 ## Restricciones no negociables
 
