@@ -345,9 +345,115 @@ pytest. Dependencias con `uv`/`pip-tools` (`pyproject.toml`).
 - Pruebas moderadas y dirigidas a lo que realmente se rompe (parser contra
   fixtures HTML reales, aritmética del precio en parcela, integridad del
   mapeo canónico) — no cobertura formal exhaustiva.
-- Al cerrar un issue: commit en español con el porqué, y actualizar el
-  issue de Linear con hallazgos y decisiones antes de pasarlo a Done.
+- Al cerrar un issue: commit con el porqué en el cuerpo (formato en
+  "Formato de commits"), y actualizar el issue de Linear con hallazgos y
+  decisiones antes de pasarlo a Done.
 - Parte de la suite pega al SNIIM en vivo (robots, GET sin estado, cotejo de
   catálogos). Lo demás corre offline contra fixtures.
 - Restricción de costo: GCP ≤ USD 20/mes. Vistas/tablas precalculadas,
   nunca agregación en tiempo real desde la app (`@st.cache_data`).
+
+## Formato de commits
+
+**Conventional Commits a partir de ALD-27.** Lo anterior (ALD-24 a ALD-56) se
+queda como está: reescribir el historial para uniformarlo cuesta un force-push
+sobre `main` y no compra nada. El corte se lee por la fecha, no hay que
+adivinarlo.
+
+El tipo y el pie van en inglés porque son palabras clave del formato, no prosa.
+Todo lo que sí es prosa —descripción y cuerpo— va en español, como manda la
+restricción 8.
+
+```
+tipo(alcance): descripción en infinitivo, sin punto final
+
+Por qué existía el problema y por qué esta solución y no otra. Lo que el
+diff no puede decir: qué se midió, qué se descartó, qué se rompió al
+intentarlo de la otra forma.
+
+- Un punto por cada cambio que se pueda leer por separado.
+- Los números medidos van aquí, no en la descripción.
+
+Refs: ALD-NN
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+```
+
+**Tipos.** Solo estos; si ninguno encaja, casi siempre son dos commits:
+
+| Tipo | Cuándo |
+|---|---|
+| `feat` | Capacidad nueva que antes no existía |
+| `fix` | Corregir algo que estaba mal. Solo si estaba roto, no si era mejorable |
+| `refactor` | Cambia la forma, no el comportamiento observable |
+| `perf` | Menos peticiones, menos bytes, menos escaneo en BigQuery |
+| `docs` | README, CLAUDE.md, `docs/`, docstrings |
+| `test` | Pruebas y fixtures |
+| `build` | `pyproject.toml`, `uv.lock`, dependencias |
+| `ci` | `.github/workflows/`, WIF, secrets |
+| `chore` | Lo que no cae en ningún otro lado. Si se usa seguido, falta un tipo |
+
+**Alcances.** El módulo que se toca, no el archivo: `scraper`, `parser`,
+`backfill`, `daily`, `transform`, `bigquery`, `app`, `data`, `docs`, `ci`. Se
+omite el alcance cuando el cambio cruza varios (`docs: documentar la operación
+completa`).
+
+**Descripción**
+
+- Infinitivo, que es el imperativo del español: `desacoplar`, `anotar`,
+  `cargar`. Nunca en pasado (`desacoplé`, `se desacopló`) ni gerundio.
+- Minúscula inicial, sin punto final. Toda la primera línea ≤72 caracteres
+  contando `tipo(alcance): `, así que quedan ~50 para la descripción.
+- Dice **qué cambia y para qué**, no qué archivos se tocaron:
+  `feat(daily): barrer solo los mercados vivos`, no `actualizar daily.py`.
+- Un commit, un cambio con sentido propio. Si la descripción necesita una "y"
+  que une dos cosas sin relación, son dos commits.
+
+**Cuerpo**
+
+- Obligatorio salvo en cambios triviales de una línea. Línea en blanco después
+  de la descripción, envuelto a 72 columnas.
+- Explica **por qué**, no cómo: el cómo está en el diff y en los comentarios
+  del código.
+- Registra lo que se midió y lo que se descartó. Ese es el material que después
+  termina en el README y en CLAUDE.md.
+- Nombres de código (`PartitionWriter`, `cargado_en`, `--solo-cargar`) tal cual,
+  en inglés, aunque el texto vaya en español.
+
+**Pies**
+
+- `Refs: ALD-NN` cuando hay issue de Linear. Va en el pie y no en la
+  descripción, que ya va apretada de caracteres.
+- `Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>` como último pie
+  cuando el commit se escribió en sesión con Claude.
+
+**Cambios que rompen.** `!` antes de los dos puntos y pie `BREAKING CHANGE:`
+explicando qué hay que rehacer. Aquí "romper" no es una API pública —no hay—
+sino **invalidar datos ya cargados**: cambiar la llave natural, el esquema de
+`crudo.precios` o el significado de una columna obliga a recargar el histórico.
+
+```
+feat(bigquery)!: incluir la calidad en la llave natural
+
+BREAKING CHANGE: llave_fila cambia para todas las filas ya cargadas. Hay
+que truncar crudo.precios y devolver la rejilla del backfill a la cola.
+```
+
+**Qué no hacer**
+
+- No commitear con `ruff` en rojo: `uv run ruff check .` pasa limpio antes.
+- No mezclar el cambio de código con el reformateo del archivo entero.
+- No `chore: cambios varios`. El tipo correcto con descripción vacía sigue
+  siendo un commit inútil.
+- No cerrar un issue de Linear sin haber escrito el porqué en el commit: el
+  commit y la nota del issue son la misma explicación.
+
+Ejemplos, traduciendo el historial real al formato nuevo:
+
+```
+feat(backfill): desacoplar la carga del barrido y cargar por año
+fix(scraper): anotar las peticiones que se rinden en vez de perderlas
+fix(daily): pedir el día de la fuente y no el del runner
+perf(daily): barrer solo los mercados vivos y acortar la ventana
+docs: documentar la operación completa en el README
+ci: configurar el job diario en GitHub Actions
+```
