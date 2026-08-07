@@ -29,9 +29,10 @@ arrancar y parar es el modo normal de operación, no una falla.
 
 La documentación operativa **vive en el README, no en `docs/backfill.md`**
 (ALD-56 se ajustó a eso): cómo funciona el scraping, el esquema de
-`crudo.precios`, la estrategia diaria vs. histórica, las consultas de
-comprobación —SQLite y BigQuery— y una tabla de síntoma → archivo. `docs/`
-sigue siendo solo evidencia de investigación de la fuente.
+`crudo.precios`, la estrategia diaria vs. histórica, una sección de idempotencia
+que explica en cuatro capas por qué repetir trabajo nunca duplica ni pierde
+filas, las consultas de comprobación —SQLite y BigQuery— y una tabla de síntoma
+→ archivo. `docs/` sigue siendo solo evidencia de investigación de la fuente.
 
 Observabilidad: `transform/monitor.py` consulta BigQuery después de cada
 corrida y manda a Sentry el resumen, los mercados activos sin datos, la
