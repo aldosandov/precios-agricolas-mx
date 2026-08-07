@@ -22,10 +22,16 @@ alerta llega a Sentry con el DSN real (ALD-25).
 
 **Fase 2 en curso.** Cerrados ALD-53 (consola de progreso), ALD-26 (tabla de
 cobertura y reanudación), ALD-54 (`errback`), ALD-30 (spider de backfill),
-ALD-55 (carga y purga) y ALD-57 (desacoplar la carga, cargar por año). Sigue
-ALD-56 (`docs/backfill.md`) y ALD-27 (la corrida). El backfill **se ejecuta a
-mano en la laptop**, en sesiones de tiempo libre a lo largo de varios días:
+ALD-55 (carga y purga), ALD-57 (desacoplar la carga, cargar por año) y ALD-56
+(documentación operativa). Sigue ALD-27 (la corrida). El backfill **se ejecuta
+a mano en la laptop**, en sesiones de tiempo libre a lo largo de varios días:
 arrancar y parar es el modo normal de operación, no una falla.
+
+La documentación operativa **vive en el README, no en `docs/backfill.md`**
+(ALD-56 se ajustó a eso): cómo funciona el scraping, el esquema de
+`crudo.precios`, la estrategia diaria vs. histórica, las consultas de
+comprobación —SQLite y BigQuery— y una tabla de síntoma → archivo. `docs/`
+sigue siendo solo evidencia de investigación de la fuente.
 
 Observabilidad: `transform/monitor.py` consulta BigQuery después de cada
 corrida y manda a Sentry el resumen, los mercados activos sin datos, la
